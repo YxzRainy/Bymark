@@ -1,12 +1,12 @@
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { createServer } from 'node:net'
+import { readFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
 import path from 'node:path'
 
 const configuredUrl = process.env.BYMARK_URL
 let targetUrl = configuredUrl || 'http://127.0.0.1:5174'
 let localServer
-let stoppingLocalServer = false
 
 async function hasServer(url) {
   try {
@@ -17,48 +17,35 @@ async function hasServer(url) {
   }
 }
 
-function findAvailablePort() {
-  return new Promise((resolve, reject) => {
-    const server = createServer()
-    server.unref()
-    server.on('error', reject)
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address()
-      server.close((error) => {
-        if (error) reject(error)
-        else if (address && typeof address !== 'string') resolve(address.port)
-        else reject(new Error('无法找到可用端口。'))
-      })
-    })
-  })
-}
-
-async function startLocalServer(port) {
-  localServer = spawn(
-    process.execPath,
-    [path.resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
-    { stdio: ['pipe', 'pipe', 'pipe'] },
-  )
-
-  let startupError = ''
-  localServer.stdout.on('data', (chunk) => {
-    startupError += chunk.toString()
-  })
-  localServer.stderr.on('data', (chunk) => {
-    startupError += chunk.toString()
-  })
-  localServer.on('exit', (code, signal) => {
-    if (!stoppingLocalServer) console.error(`QA 服务意外退出 (${code ?? signal})：${startupError}`)
-  })
-
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    if (await hasServer(targetUrl)) return
-    if (localServer.exitCode !== null) {
-      throw new Error(`无法启动本地 QA 服务。${startupError}`)
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100))
+async function startLocalServer() {
+  const dist = path.resolve('dist')
+  const contentTypes = {
+    '.css': 'text/css; charset=utf-8',
+    '.html': 'text/html; charset=utf-8',
+    '.ico': 'image/x-icon',
+    '.js': 'text/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.png': 'image/png',
+    '.webmanifest': 'application/manifest+json',
   }
-  throw new Error(`本地 QA 服务启动超时。${startupError}`)
+  localServer = createServer(async (request, response) => {
+    try {
+      const pathname = decodeURIComponent(new URL(request.url ?? '/', 'http://localhost').pathname)
+      const file = path.resolve(dist, `.${pathname === '/' ? '/index.html' : pathname}`)
+      if (!file.startsWith(`${dist}${path.sep}`)) {
+        response.writeHead(403).end()
+        return
+      }
+      const body = await readFile(file)
+      response.writeHead(200, { 'Content-Type': contentTypes[path.extname(file)] ?? 'application/octet-stream' })
+      response.end(body)
+    } catch {
+      response.writeHead(404).end()
+    }
+  })
+  localServer.listen(0, '127.0.0.1')
+  await once(localServer, 'listening')
+  targetUrl = `http://127.0.0.1:${localServer.address().port}`
 }
 
 try {
@@ -66,9 +53,7 @@ try {
     if (configuredUrl) {
       throw new Error(`BYMARK_URL 未指向可访问的 Bymark 服务：${configuredUrl}`)
     }
-    const port = await findAvailablePort()
-    targetUrl = `http://127.0.0.1:${port}`
-    await startLocalServer(port)
+    await startLocalServer()
   }
   const qaScript = process.argv[2] || 'tests/qa.mjs'
   const runner = spawn(process.execPath, [qaScript], {
@@ -79,8 +64,8 @@ try {
   if (signal) process.exitCode = 1
   else process.exitCode = code ?? 1
 } finally {
-  if (localServer && localServer.exitCode === null) {
-    stoppingLocalServer = true
-    localServer.kill('SIGTERM')
+  if (localServer) {
+    localServer.closeAllConnections()
+    await new Promise((resolve) => localServer.close(resolve))
   }
 }

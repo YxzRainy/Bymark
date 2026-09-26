@@ -16,6 +16,16 @@ async function exportFrom(viewport, label) {
     deviceScaleFactor: 1,
     acceptDownloads: true,
   })
+  await context.route('**/__bymark_shared_storage*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  )
+  await context.route('https://api.github.com/repos/YxzRainy/Bymark/releases/latest', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ tag_name: 'v0.1.0', html_url: 'https://github.com/YxzRainy/Bymark/releases' }),
+    }),
+  )
   const page = await context.newPage()
   const errors = []
   page.on('pageerror', (error) => errors.push(error.message))

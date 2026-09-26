@@ -12,8 +12,8 @@
     "lint": "eslint .",
     "unit": "node --experimental-strip-types tests/unit.mjs",
     "test:shared": "node tests/shared-storage.mjs",
-    "qa": "node tests/run-qa.mjs",
-    "qa:export": "node tests/run-qa.mjs tests/export-consistency.mjs",
+    "qa": "npm run build && node tests/run-qa.mjs",
+    "qa:export": "npm run build && node tests/run-qa.mjs tests/export-consistency.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

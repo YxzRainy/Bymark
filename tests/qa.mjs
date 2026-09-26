@@ -112,7 +112,14 @@ check(
 const iconAssets = await page.evaluate(async () =>
   Promise.all(
     ['/favicon.ico', '/favicon-32.png', '/apple-touch-icon.png', '/icon-192.png', '/icon-512.png', '/site.webmanifest'].map(
-      async (asset) => ({ asset, ok: (await fetch(asset)).ok }),
+      async (asset) => {
+        try {
+          const response = await fetch(asset === '/favicon.ico' ? `${asset}?qa=1` : asset, { cache: 'no-store' })
+          return { asset, ok: response.ok, status: response.status }
+        } catch (error) {
+          return { asset, ok: false, error: String(error) }
+        }
+      },
     ),
   ),
 )
