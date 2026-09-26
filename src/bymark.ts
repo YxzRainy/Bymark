@@ -15,13 +15,17 @@ import {
   DEFAULT_SCENE_CARD_PADDING,
   SCENE_CARD_PADDING_MIN,
   SCENE_CARD_PADDING_MAX,
+  DEFAULT_SCENE_CARD_HEIGHT,
+  SCENE_CARD_HEIGHT_MIN,
+  SCENE_CARD_HEIGHT_MAX,
   resolveDeviceTheme,
 } from './default-settings'
 import { normalizeSceneBackdrop } from './sceneBackdrops.ts'
 import { filenameBaseFor, normalizeWorkTitle } from './title'
+import { isSharedStorageEnabled, loadSharedValue, saveSharedValue, sharedInitialValue } from './sharedStorage.ts'
 
 export type { AspectRatio, BymarkState, ExportMode, ImageAlignment, ImagePosition, Theme, VisualStyle, CanvasStyle, SceneFocus, SceneCardRatio, SceneBackdropPreset, SocialMetricScale } from './default-settings'
-export { DEFAULT_AVATAR, DEFAULT_BYMARK_SETTINGS, DEFAULT_EXPORT_SETTINGS, DEFAULT_IMAGE_SCALE, DEFAULT_SCENE_CARD_PADDING, SCENE_CARD_PADDING_MIN, SCENE_CARD_PADDING_MAX } from './default-settings'
+export { DEFAULT_AVATAR, DEFAULT_BYMARK_SETTINGS, DEFAULT_EXPORT_SETTINGS, DEFAULT_IMAGE_SCALE, DEFAULT_SCENE_CARD_PADDING, SCENE_CARD_PADDING_MIN, SCENE_CARD_PADDING_MAX, DEFAULT_SCENE_CARD_HEIGHT, SCENE_CARD_HEIGHT_MIN, SCENE_CARD_HEIGHT_MAX } from './default-settings'
 export { normalizeWorkTitle, resolvedTitleFor, textTitleFor, WORK_TITLE_MAX_LENGTH, FILENAME_TITLE_MAX_LENGTH } from './title'
 
 export const DEFAULT_STATE: BymarkState = createDefaultState()
@@ -151,6 +155,9 @@ export function normalizeState(parsed: Partial<BymarkState> & LegacyPublishDetai
   const sceneCardScale = typeof parsed.sceneCardScale === 'number' && Number.isFinite(parsed.sceneCardScale)
     ? Math.min(100, Math.max(70, Math.round(parsed.sceneCardScale)))
     : defaults.sceneCardScale
+  const sceneCardHeight = typeof parsed.sceneCardHeight === 'number' && Number.isFinite(parsed.sceneCardHeight)
+    ? Math.min(SCENE_CARD_HEIGHT_MAX, Math.max(SCENE_CARD_HEIGHT_MIN, Math.round(parsed.sceneCardHeight)))
+    : DEFAULT_SCENE_CARD_HEIGHT
   const sceneCardPadding = typeof parsed.sceneCardPadding === 'number' && Number.isFinite(parsed.sceneCardPadding)
     ? Math.min(SCENE_CARD_PADDING_MAX, Math.max(SCENE_CARD_PADDING_MIN, Math.round(parsed.sceneCardPadding)))
     : DEFAULT_SCENE_CARD_PADDING
@@ -188,11 +195,15 @@ export function normalizeState(parsed: Partial<BymarkState> & LegacyPublishDetai
   delete state.comments
   delete state.saves
   delete state.sceneCardPosition
-  return { ...defaults, ...state, title, ratio: normalizedRatio, exportMode, theme, imagePosition, imageAlignment, imageScale, fontScale, lineHeightScale, visualStyle, canvasStyle, sceneBackdrop, sceneFocus, sceneCardRatio, sceneCardScale, sceneCardPadding, sceneCardX, sceneCardY, sceneOverlay, socialReplies, socialReposts, socialLikes, socialViews, socialMetricScale }
+  return { ...defaults, ...state, title, ratio: normalizedRatio, exportMode, theme, imagePosition, imageAlignment, imageScale, fontScale, lineHeightScale, visualStyle, canvasStyle, sceneBackdrop, sceneFocus, sceneCardRatio, sceneCardScale, sceneCardHeight, sceneCardPadding, sceneCardX, sceneCardY, sceneOverlay, socialReplies, socialReposts, socialLikes, socialViews, socialMetricScale }
 }
 
 export function loadState(): BymarkState {
   try {
+    if (isSharedStorageEnabled()) {
+      const shared = sharedInitialValue('settings')
+      return shared?.state ? normalizeState(shared.state) : createDefaultState(resolveDeviceTheme())
+    }
     const stored =
       parseStoredState(localStorage.getItem(SETTINGS_STORAGE_KEY)) ??
       LEGACY_STORAGE_KEYS.map((key) => parseStoredState(localStorage.getItem(key))).find(Boolean)
@@ -204,17 +215,25 @@ export function loadState(): BymarkState {
   }
 }
 
+let sharedSettingsWrite = Promise.resolve()
+
 export function saveState(state: BymarkState) {
+  const stored: StoredSettings = {
+    version: SETTINGS_VERSION,
+    updatedAt: new Date().toISOString(),
+    state,
+  }
   try {
-    const stored: StoredSettings = {
-      version: SETTINGS_VERSION,
-      updatedAt: new Date().toISOString(),
-      state,
-    }
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(stored))
   } catch {
     // Local settings are an enhancement; an unavailable browser storage must
     // never prevent the editor from being usable.
+  }
+  if (isSharedStorageEnabled()) {
+    sharedSettingsWrite = sharedSettingsWrite.catch(() => undefined).then(() =>
+      saveSharedValue('settings', JSON.parse(JSON.stringify(stored))),
+    )
+    void sharedSettingsWrite.catch(console.error)
   }
 }
 
@@ -296,6 +315,7 @@ function writeAvatarToDatabase(avatar: string | null, name = AVATAR_DB_NAME, key
 }
 
 export async function loadAvatar() {
+  if (isSharedStorageEnabled()) return loadSharedValue('avatar')
   try {
     const stored = await readAvatarFromDatabase()
     if (stored) return stored
@@ -311,6 +331,10 @@ export async function loadAvatar() {
 }
 
 export async function saveAvatar(avatar: string | null) {
+  if (isSharedStorageEnabled()) {
+    await saveSharedValue('avatar', avatar)
+    return
+  }
   try {
     await Promise.all([
       writeAvatarToDatabase(avatar),
@@ -328,6 +352,7 @@ export async function saveAvatar(avatar: string | null) {
 }
 
 export async function loadImageAsset(key: string) {
+  if (isSharedStorageEnabled()) return loadSharedValue(key === SCENE_IMAGE_ASSET_KEY ? 'sceneImage' : 'image')
   try {
     return await readAvatarFromDatabase(AVATAR_DB_NAME, key)
   } catch {
@@ -336,6 +361,10 @@ export async function loadImageAsset(key: string) {
 }
 
 export async function saveImageAsset(key: string, value: string | null) {
+  if (isSharedStorageEnabled()) {
+    await saveSharedValue(key === SCENE_IMAGE_ASSET_KEY ? 'sceneImage' : 'image', value)
+    return
+  }
   try {
     await writeAvatarToDatabase(value, AVATAR_DB_NAME, key)
   } catch {

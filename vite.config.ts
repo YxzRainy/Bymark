@@ -2,13 +2,13 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import vueJsx from "@vitejs/plugin-vue-jsx";
 import tailwindcss from "@tailwindcss/vite";
+import { fileURLToPath } from 'node:url';
+import { sharedStoragePlugin } from './scripts/shared-storage.mjs';
 
 export default defineConfig({
-  plugins: [vue(), vueJsx(), tailwindcss()],
+  plugins: [vue(), vueJsx(), tailwindcss(), sharedStoragePlugin(fileURLToPath(new URL('.', import.meta.url)))],
   server: {
-    // 固定端口：端口被占用时直接报错而不是顺延到 5174/5175。
-    // 浏览器按"源"（含端口）隔离存储，端口漂移会让草稿看起来分散在多处。
-    port: 5173,
-    strictPort: true,
+    // Development instances on any port use the same project-local store.
+    port: 5174,
   },
 });

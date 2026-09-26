@@ -5,6 +5,7 @@ import { createNextIssueState } from '../src/nextIssue.ts'
 import { DEFAULT_BYMARK_SETTINGS, DEFAULT_EXPORT_SETTINGS, DEFAULT_IMAGE_SCALE, resolveDeviceTheme } from '../src/default-settings.ts'
 import { normalizeSceneBackdrop, SCENE_BACKDROPS } from '../src/sceneBackdrops.ts'
 import { imageScaleLimitForFrame } from '../src/imageScale.ts'
+import { compareVersions, resolveVersionUpdate } from '../src/version.ts'
 import { WORKSPACE_VERSION, createWorkspaceExport, mergeById, parseWorkspaceExport } from '../src/workspace.ts'
 import {
   PAGE_BREAK_MARKER,
@@ -40,6 +41,7 @@ assert.equal(DEFAULT_BYMARK_SETTINGS.imageScale, DEFAULT_IMAGE_SCALE)
 assert.equal(DEFAULT_BYMARK_SETTINGS.visualStyle, 'default')
 assert.equal(DEFAULT_BYMARK_SETTINGS.sceneBackdrop, 'lagoon')
 assert.equal(DEFAULT_BYMARK_SETTINGS.sceneCardRatio, '3:4')
+assert.equal(DEFAULT_BYMARK_SETTINGS.sceneCardHeight, 100)
 assert.equal(DEFAULT_BYMARK_SETTINGS.sceneCardPadding, 40)
 assert.equal(DEFAULT_BYMARK_SETTINGS.socialReplies, '2')
 assert.equal(DEFAULT_BYMARK_SETTINGS.socialReposts, '')
@@ -55,6 +57,15 @@ assert.equal(imageScaleLimitForFrame({ contentWidth: 452, contentHeight: 676, im
 assert.equal(imageScaleLimitForFrame({ contentWidth: 620, contentHeight: 584, imageAspectRatio: 1.44, heightBasis: 38 }), 160)
 assert.equal(imageScaleLimitForFrame({ contentWidth: 665, contentHeight: 800, imageAspectRatio: 1.375, heightBasis: 47.8 }), 126)
 assert.equal(imageScaleLimitForFrame({ contentWidth: 300, contentHeight: 700, imageAspectRatio: 4, heightBasis: 42 }), 80)
+assert.ok(compareVersions('0.2.0', '0.1.9') > 0)
+assert.ok(compareVersions('v1.0.0', '1.0.0-beta.2') > 0)
+assert.ok(compareVersions('1.0.0-beta.2', '1.0.0-beta.10') < 0)
+assert.equal(compareVersions('not-a-version', '1.0.0'), null)
+assert.deepEqual(
+  resolveVersionUpdate('0.1.0', { version: '0.2.0', url: 'https://example.com', source: 'release' }),
+  { currentVersion: '0.1.0', version: '0.2.0', url: 'https://example.com', source: 'release' },
+)
+assert.equal(resolveVersionUpdate('0.2.0', { version: '0.2.0', url: 'https://example.com', source: 'release' }), null)
 
 const state = {
   title: '作品标题',
@@ -83,6 +94,7 @@ const state = {
   sceneFocus: 'center',
   sceneCardRatio: '4:3',
   sceneCardScale: 100,
+  sceneCardHeight: 78,
   sceneCardPadding: 64,
   sceneCardX: 50,
   sceneCardY: 50,
@@ -99,6 +111,7 @@ assert.equal(profile.name, '作者')
 assert.equal(profile.lineHeightScale, 100)
 assert.equal(profile.visualStyle, 'default')
 assert.equal(profile.sceneBackdrop, 'lagoon')
+assert.equal(profile.sceneCardHeight, 78)
 assert.equal(profile.sceneCardPadding, 64)
 assert.equal(profile.socialMetricScale, 'daily')
 assert.equal(resolvedTitleFor(state), '作品标题')
@@ -293,6 +306,31 @@ const folioWideSceneShortPages = paginateMarkdownDetailed(folioWideSceneShortPos
   hasImage: false,
 })
 assert.equal(folioWideSceneShortPages.length, 1)
+
+const sceneHeightPaginationSource = '卡片高度会参与分页。'.repeat(120)
+const fullSceneHeightPages = paginateMarkdownDetailed(sceneHeightPaginationSource, {
+  ratio: '3:4',
+  exportMode: 'standard',
+  fontScale: 100,
+  lineHeightScale: 100,
+  canvasStyle: 'scene',
+  visualStyle: 'folio',
+  sceneCardRatio: '3:4',
+  sceneCardHeight: 100,
+  hasImage: false,
+})
+const compactSceneHeightPages = paginateMarkdownDetailed(sceneHeightPaginationSource, {
+  ratio: '3:4',
+  exportMode: 'standard',
+  fontScale: 100,
+  lineHeightScale: 100,
+  canvasStyle: 'scene',
+  visualStyle: 'folio',
+  sceneCardRatio: '3:4',
+  sceneCardHeight: 60,
+  hasImage: false,
+})
+assert.ok(compactSceneHeightPages.length > fullSceneHeightPages.length)
 
 const folioPinnedSource = `${folioShortPost.slice(0, 43)}${PAGE_BREAK_MARKER}${folioShortPost.slice(43)}`
 const folioPinnedPages = paginateMarkdownDetailed(folioPinnedSource, {

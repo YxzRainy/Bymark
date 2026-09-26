@@ -47,35 +47,53 @@ export const DraftLibrary = defineComponent((props: {
 }) => {
   const collapsed = ref(false);
   const mobileOpen = ref(false);
+  const mobileTriggerExpanded = ref(false);
   const workspaceInputRef = ref<HTMLInputElement | null>(null);
   const closeMobileDrawer = () => {
     mobileOpen.value = false;
   };
   const handleKeydown = (event: KeyboardEvent) => {
-    if (event.key === "Escape") closeMobileDrawer();
+    if (event.key !== "Escape") return;
+    if (mobileOpen.value) closeMobileDrawer();
+    else mobileTriggerExpanded.value = false;
+  };
+  const collapseMobileTriggerOnOutsideClick = (event: MouseEvent) => {
+    if (!mobileTriggerExpanded.value) return;
+    if (event.target instanceof Element && event.target.closest(".draft-mobile-trigger")) return;
+    mobileTriggerExpanded.value = false;
   };
   watch(mobileOpen, (open) => document.documentElement.classList.toggle("draft-drawer-open", open));
-  onMounted(() => document.addEventListener("keydown", handleKeydown));
+  onMounted(() => {
+    document.addEventListener("keydown", handleKeydown);
+    document.addEventListener("click", collapseMobileTriggerOnOutsideClick);
+  });
   onBeforeUnmount(() => {
     document.removeEventListener("keydown", handleKeydown);
+    document.removeEventListener("click", collapseMobileTriggerOnOutsideClick);
     document.documentElement.classList.remove("draft-drawer-open");
   });
   return () => (
     <>
       <button
         type="button"
-        class={["draft-mobile-trigger", mobileOpen.value && "draft-mobile-trigger-open"]}
-        aria-label="打开草稿抽屉"
+        class={["draft-mobile-trigger", mobileTriggerExpanded.value && "draft-mobile-trigger-expanded", mobileOpen.value && "draft-mobile-trigger-open"]}
+        aria-label={mobileTriggerExpanded.value ? "打开草稿抽屉" : "展开草稿入口"}
         aria-controls="draft-library"
         aria-expanded={mobileOpen.value}
         onClick={() => {
+          if (!mobileTriggerExpanded.value) {
+            mobileTriggerExpanded.value = true;
+            return;
+          }
           collapsed.value = false;
           mobileOpen.value = true;
         }}
       >
         <PanelLeftOpen size={18} />
-        <span>草稿</span>
-        {props.drafts.length > 0 && <em>{props.drafts.length}</em>}
+        <span class="draft-mobile-trigger-details" aria-hidden={!mobileTriggerExpanded.value}>
+          <span>草稿</span>
+          {props.drafts.length > 0 && <em>{props.drafts.length}</em>}
+        </span>
       </button>
       <button
         type="button"

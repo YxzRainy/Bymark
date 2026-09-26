@@ -3,7 +3,7 @@ import { mkdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { chromium } from 'playwright'
 
-const baseURL = process.env.BYMARK_URL || 'http://127.0.0.1:5173'
+const baseURL = process.env.BYMARK_URL || 'http://127.0.0.1:5174'
 const artifacts = path.resolve('test-results', 'export-consistency')
 await mkdir(artifacts, { recursive: true })
 
@@ -24,7 +24,33 @@ async function exportFrom(viewport, label) {
   })
 
   await page.addInitScript(() => {
+    localStorage.setItem('bymark-settings-v1', JSON.stringify({
+      visualStyle: 'folio',
+      canvasStyle: 'scene',
+      theme: 'white',
+      ratio: '3:4',
+      sceneCardRatio: '4:3',
+      text: 'Export metric labels',
+      socialReplies: '11',
+      socialReposts: '13',
+      socialLikes: '1.3K',
+      socialViews: '17K',
+    }))
     window.__exportSourceMetrics = []
+    window.__exportCloneMetrics = []
+    window.__previewMetricFontSizes = []
+    const serializeToString = XMLSerializer.prototype.serializeToString
+    XMLSerializer.prototype.serializeToString = function serializeExport(node) {
+      const serialized = serializeToString.call(this, node)
+      if (serialized.includes('post-social-actions')) {
+        const document = new DOMParser().parseFromString(serialized, 'image/svg+xml')
+        window.__exportCloneMetrics = Array.from(document.querySelectorAll('.post-social-actions b')).map((metric) => ({
+          text: metric.textContent,
+          style: metric.getAttribute('style') ?? '',
+        }))
+      }
+      return serialized
+    }
     new MutationObserver(() => {
       const card = document.querySelector('[data-export-render-card]')
       if (!card || window.__exportSourceMetrics.length) return
@@ -34,13 +60,19 @@ async function exportFrom(viewport, label) {
         height: card.clientHeight,
         transform: style.transform,
         transitionDuration: style.transitionDuration,
+        metricFontSizes: Array.from(card.querySelectorAll('.post-social-actions b'))
+          .map((metric) => getComputedStyle(metric).fontSize),
       })
     }).observe(document, { childList: true, subtree: true })
   })
 
-  await page.goto(baseURL, { waitUntil: 'networkidle' })
+  await page.goto(baseURL, { waitUntil: 'domcontentloaded' })
   await page.locator('[data-testid="export-card"]').waitFor({ state: 'attached' })
   await page.waitForTimeout(200)
+  await page.evaluate(() => {
+    window.__previewMetricFontSizes = Array.from(document.querySelectorAll('[data-testid="export-card"] .post-social-actions b'))
+      .map((metric) => getComputedStyle(metric).fontSize)
+  })
   const previewMarkup = await page.locator('[data-testid="export-card"]').evaluate((node) => node.outerHTML)
   const [download] = await Promise.all([
     page.waitForEvent('download'),
@@ -51,6 +83,8 @@ async function exportFrom(viewport, label) {
   if (await download.failure()) throw new Error(`${label} export failed: ${await download.failure()}`)
 
   const sourceMetrics = await page.evaluate(() => window.__exportSourceMetrics)
+  const cloneMetrics = await page.evaluate(() => window.__exportCloneMetrics)
+  const previewMetricFontSizes = await page.evaluate(() => window.__previewMetricFontSizes)
   const bytes = await readFile(outputPath)
   await context.close()
   return {
@@ -58,6 +92,8 @@ async function exportFrom(viewport, label) {
     errors,
     previewMarkup,
     sourceMetrics,
+    cloneMetrics,
+    previewMetricFontSizes,
     width: bytes.readUInt32BE(16),
     height: bytes.readUInt32BE(20),
     sha256: createHash('sha256').update(bytes).digest('hex'),
@@ -81,6 +117,27 @@ try {
     }
     if (result.width !== 1536 || result.height !== 2048) {
       throw new Error(`${label} export dimensions are ${result.width}x${result.height}`)
+    }
+    const metricValues = result.cloneMetrics.map((metric) => metric.text)
+    const stableMetricWidths = result.cloneMetrics.every((metric) => {
+      const minWidth = metric.style.match(/min-width: ([\d.]+)px/)?.[1]
+      return Number(minWidth) >= 54
+    })
+    const clonedMetricFontSizes = result.cloneMetrics.map((metric) =>
+      metric.style.match(/font: [^;]*?([\d.]+)px\s*\//)?.[1],
+    )
+    if (
+      metricValues.join('|') !== '11|13|1.3K|17K' ||
+      !stableMetricWidths ||
+      result.previewMetricFontSizes.some((size) => size !== '12px') ||
+      source.metricFontSizes.some((size) => size !== '12px') ||
+      clonedMetricFontSizes.some((size) => size !== '12')
+    ) {
+      throw new Error(`${label} export changed social metric sizing: ${JSON.stringify({
+        preview: result.previewMetricFontSizes,
+        source: source.metricFontSizes,
+        clone: result.cloneMetrics,
+      })}`)
     }
   }
   if (!desktop.bytes.equals(mobile.bytes)) {

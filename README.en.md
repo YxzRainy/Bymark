@@ -46,7 +46,9 @@ npm install
 npm run dev
 ```
 
-Open the URL printed by the terminal, usually `http://localhost:5173`.
+Open the URL printed by the development server. It prefers `http://localhost:5174`, but another port works when 5174 is occupied or `--port` is provided.
+
+Local Vite development and preview servers share drafts, archives, presets, avatars, images, and settings through `.bymark-local-data/` in the project. Opening another localhost or 127.0.0.1 port and refreshing reads the same data. Each old browser origin imports its existing data the first time it opens after this update. To bring in drafts previously stored at `localhost:5174`, open that address once after updating; browsers cannot read another port's old IndexedDB directly. The shared directory is Git ignored. Keep workspace backups for moving to another computer.
 
 ## Production build and deployment
 
@@ -66,6 +68,10 @@ Typical platform settings:
 | Self-hosted static server | Build locally, then upload `dist/` | `dist` |
 
 There are no required environment variables or server APIs. If the app is deployed under a non-root path, configure Vite's `base` option and verify icon, Manifest, and asset URLs.
+
+### Publishing a new version
+
+The app checks the latest stable GitHub Release every four hours and compares it with the deployed version from `package.json`. Until the repository has its first Release, it falls back to the version on the `main` branch. Before publishing, update `version` in `package.json` (for example, `0.2.0`) and preferably create a matching GitHub Release (for example, `v0.2.0`). When a newer version is found, a green update link appears beside the logo.
 
 ## Commands
 
@@ -112,12 +118,14 @@ BYMARK_URL=http://127.0.0.1:4173 npm run qa
 src/
   components/       editor, preview, draft, and template components
   App.tsx           app orchestration, autosave, pagination, and image export
-  drafts.ts         IndexedDB draft storage and snapshot logic
+  drafts.ts         draft storage and snapshot logic
+  sharedStorage.ts  local shared-storage client and migration
   brandTemplates.ts local settings-preset storage
   markdown.tsx      Markdown rendering and plain-text copying
   pagination.ts     long-text pagination and manual page breaks
   workspace.ts      workspace backup format and merge logic
   bymark.ts         editor state, local settings, and image storage
+scripts/            Vite local shared-storage service
 public/             icons, default avatar, and PWA Manifest
 docs/images/        README preview images
 tests/              unit checks and browser QA
@@ -125,7 +133,7 @@ tests/              unit checks and browser QA
 
 ## Data and privacy
 
-Bymark has no backend service. Settings are kept in browser `localStorage`; drafts, settings presets, and image assets use IndexedDB and stay in the current browser. Nothing is synced to the cloud automatically, and clearing site data removes local content, so use workspace backup for a portable copy.
+Deployed Bymark has no backend service: settings stay in browser `localStorage`, while drafts, presets, and image assets use IndexedDB. Only local Vite development and preview servers use the shared project directory. Nothing is synced to the cloud automatically; use workspace backup for a portable copy.
 
 Before deployment, verify:
 

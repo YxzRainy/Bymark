@@ -5,7 +5,7 @@ const browser = await chromium.launch({ headless: true })
 try {
   // An isolated context keeps the user's local drafts untouched.
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
-  await page.goto(process.env.BYMARK_URL || 'http://127.0.0.1:5173', { waitUntil: 'networkidle' })
+  await page.goto(process.env.BYMARK_URL || 'http://127.0.0.1:5174', { waitUntil: 'networkidle' })
   const body = page.getByLabel('正文', { exact: true })
   const titles = () => page.locator('.draft-row h3').allTextContents()
   const waitForTitles = async (expected) => {

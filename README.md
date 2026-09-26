@@ -46,7 +46,9 @@ npm install
 npm run dev
 ```
 
-启动后打开终端提示的地址，通常是 `http://localhost:5173`。
+启动后打开终端显示的地址。开发服务优先使用 `http://localhost:5174`；端口被占用或指定 `--port` 时也可以在其他端口打开。
+
+本地 Vite 开发与预览服务通过项目中的 `.bymark-local-data/` 共享草稿、归档、预设、头像、图片和当前设置，因此切换 `localhost` 或 `127.0.0.1` 的端口后，刷新页面仍会读取同一份数据。首次打开某个旧地址时，该地址浏览器里原有的数据会合并进共享存储。为迁移图一中的旧草稿，请在更新后至少打开一次 `http://localhost:5174`；浏览器不允许其他端口直接读取 5174 的旧 IndexedDB。共享目录已加入 `.gitignore`，请保留工作区备份以便迁移到其他电脑。
 
 ## 生产构建与部署
 
@@ -66,6 +68,10 @@ npm run preview
 | 自有静态服务器 | 在本地构建后上传 `dist/` | `dist` |
 
 当前项目没有必需的环境变量，也没有服务端 API。若部署在非根路径，需要额外配置 Vite 的 `base` 路径，并同步检查图标、Manifest 和资源地址。
+
+### 发布新版本
+
+应用会每 4 小时检查一次 GitHub 最新正式 Release，并用 `package.json` 中的版本号与当前部署版本比较；仓库尚未发布 Release 时，会回退读取 `main` 分支的版本号。发布时请先更新 `package.json` 的 `version`（例如 `0.2.0`），推荐再创建同版本的 GitHub Release（例如 `v0.2.0`）。检测到更高版本后，Logo 右侧会出现绿色的“更新”入口。
 
 ## 常用命令
 
@@ -112,12 +118,14 @@ BYMARK_URL=http://127.0.0.1:4173 npm run qa
 src/
   components/       编辑器、预览、草稿和模板组件
   App.tsx           应用编排、自动保存、分页和图片导出
-  drafts.ts         IndexedDB 草稿读写与快照逻辑
+  drafts.ts         草稿读写与快照逻辑
+  sharedStorage.ts  本地共享存储客户端与旧数据迁移
   brandTemplates.ts 本地设置预设读写逻辑
   markdown.tsx      Markdown 渲染与纯正文复制
   pagination.ts     长文分页与手动分页标记
   workspace.ts      工作区备份格式与合并逻辑
   bymark.ts         编辑器状态、本地设置和图片存储
+scripts/            Vite 本地共享存储服务
 public/             网站图标、默认头像和 PWA Manifest
 docs/images/        README 预览图
 tests/              单元检查与浏览器 QA
@@ -125,7 +133,7 @@ tests/              单元检查与浏览器 QA
 
 ## 数据与隐私
 
-Bymark 没有后端服务。设置保存在浏览器 `localStorage`，草稿、设置预设和图片资源保存在 IndexedDB，数据只留在当前浏览器。数据不会自动同步到云端；清除浏览器站点数据会删除这些内容，请使用工作区备份保留可迁移副本。
+部署后的 Bymark 没有后端服务：设置保存在浏览器 `localStorage`，草稿、设置预设和图片资源保存在 IndexedDB。仅本地 Vite 开发与预览服务使用项目目录中的共享存储。数据不会自动同步到云端；请使用工作区备份保留可迁移副本。
 
 部署前建议确认：
 

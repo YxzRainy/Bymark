@@ -10,6 +10,7 @@ const PARAGRAPH_BREAK_WEIGHT = 28;
 type PaginationOptions = Pick<BymarkState, "ratio" | "exportMode" | "fontScale" | "lineHeightScale" | "canvasStyle"> & {
   visualStyle?: BymarkState["visualStyle"];
   sceneCardRatio?: BymarkState["sceneCardRatio"];
+  sceneCardHeight?: BymarkState["sceneCardHeight"];
   capacityScale?: number;
   hasImage: boolean;
 };
@@ -70,13 +71,16 @@ function pageCapacity(options: PaginationOptions, pageIndex: number) {
   const sceneFactor = options.canvasStyle === "scene"
     ? options.visualStyle === "folio" ? 0.42 * folioCardHeightFactor : 0.62
     : 1;
+  const sceneCardHeightFactor = options.canvasStyle === "scene"
+    ? Math.min(1, Math.max(0.6, (options.sceneCardHeight ?? 100) / 100))
+    : 1;
   // Start from the full usable card area. The rendered card reports a real
   // overflow back to App, which is the authority for the final page break;
   // keeping a large safety buffer here caused a visible empty line before
   // the next page for ordinary continuous text.
   const layoutSafetyFactor = 1.402;
   const capacityScale = Math.min(1, Math.max(0.35, options.capacityScale ?? 1));
-  return Math.max(32, base * fontFactor * lineHeightFactor * imageFactor * sceneFactor * layoutSafetyFactor * capacityScale);
+  return Math.max(32, base * fontFactor * lineHeightFactor * imageFactor * sceneFactor * sceneCardHeightFactor * layoutSafetyFactor * capacityScale);
 }
 
 function pageFillRatio(text: string, options: PaginationOptions, pageIndex: number) {

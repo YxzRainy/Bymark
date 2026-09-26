@@ -4,7 +4,7 @@ import { createServer } from 'node:net'
 import path from 'node:path'
 
 const configuredUrl = process.env.BYMARK_URL
-let targetUrl = configuredUrl || 'http://127.0.0.1:5173'
+let targetUrl = configuredUrl || 'http://127.0.0.1:5174'
 let localServer
 
 async function hasServer(url) {

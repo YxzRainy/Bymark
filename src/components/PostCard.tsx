@@ -29,8 +29,20 @@ import { imageScaleLimitForFrame } from "../imageScale";
 import { MarkdownContent } from "../markdown";
 import { sceneBackdropFor } from "../sceneBackdrops";
 
-const imageHeightBasisFor = (ratio: BymarkState["ratio"]) =>
-  ratio === "3:4" ? 47.8 : 42;
+function imageHeightBasisFor(state: BymarkState) {
+  if (state.visualStyle === "folio" && state.canvasStyle === "scene" && state.sceneCardRatio === "4:3") {
+    return 62;
+  }
+  return state.ratio === "3:4" ? 47.8 : 42;
+}
+
+const SCENE_CARD_WIDTH = 800 * 0.72;
+
+function sceneCardBaseHeight(ratio: BymarkState["sceneCardRatio"]) {
+  if (ratio === "4:3") return SCENE_CARD_WIDTH * 3 / 4;
+  if (ratio === "1:1") return SCENE_CARD_WIDTH;
+  return SCENE_CARD_WIDTH * 4 / 3;
+}
 
 function sceneCardPaddingBase(state: BymarkState, isFolio: boolean) {
   if (isFolio) return [62, 68, 50, 68] as const;
@@ -100,6 +112,7 @@ export const PostCard = defineComponent(
       viewportHeight: number;
       canvasWidth: number;
       canvasHeight: number;
+      scale: number;
       minX: number;
       maxX: number;
       minY: number;
@@ -113,12 +126,14 @@ export const PostCard = defineComponent(
     const paintSceneDrag = () => {
       sceneDragFrame = undefined;
       if (!sceneDrag) return;
-      const offsetX = ((sceneDrag.x - sceneDrag.startX) / 100) * sceneDrag.canvasWidth;
-      const offsetY = ((sceneDrag.y - sceneDrag.startY) / 100) * sceneDrag.canvasHeight;
-      sceneDrag.card.style.translate = `calc(-50% + ${offsetX}px) calc(-50% + ${offsetY}px)`;
+      // The individual CSS scale is applied outside this transform. Undo it
+      // here so the card follows the pointer 1:1 at every scene-card size.
+      const offsetX = ((sceneDrag.x - sceneDrag.startX) / 100) * sceneDrag.canvasWidth / sceneDrag.scale;
+      const offsetY = ((sceneDrag.y - sceneDrag.startY) / 100) * sceneDrag.canvasHeight / sceneDrag.scale;
+      sceneDrag.card.style.transform = `translate3d(${offsetX}px, ${offsetY}px, 0)`;
     };
     const beginSceneDrag = (event: PointerEvent) => {
-      if (!usesBackdrop() || event.button !== 0 || !rootRef.value) return;
+      if (!usesBackdrop() || event.button !== 0 || !event.isPrimary || sceneDrag || !rootRef.value) return;
       const card = event.currentTarget as HTMLElement;
       const rootBounds = rootRef.value.getBoundingClientRect();
       const cardBounds = card.getBoundingClientRect();
@@ -133,10 +148,11 @@ export const PostCard = defineComponent(
         viewportHeight: rootBounds.height,
         canvasWidth: rootRef.value.offsetWidth,
         canvasHeight: rootRef.value.offsetHeight,
-        minX: Math.min(50, (cardBounds.width / rootBounds.width) * 50),
-        maxX: Math.max(50, 100 - (cardBounds.width / rootBounds.width) * 50),
-        minY: Math.min(50, (cardBounds.height / rootBounds.height) * 50),
-        maxY: Math.max(50, 100 - (cardBounds.height / rootBounds.height) * 50),
+        scale: props.state.sceneCardScale / 100,
+        minX: Math.max(5, props.state.sceneCardX + ((rootBounds.left - cardBounds.left) / rootBounds.width) * 100),
+        maxX: Math.min(95, props.state.sceneCardX + ((rootBounds.right - cardBounds.right) / rootBounds.width) * 100),
+        minY: Math.max(5, props.state.sceneCardY + ((rootBounds.top - cardBounds.top) / rootBounds.height) * 100),
+        maxY: Math.min(95, props.state.sceneCardY + ((rootBounds.bottom - cardBounds.bottom) / rootBounds.height) * 100),
         x: props.state.sceneCardX,
         y: props.state.sceneCardY,
       };
@@ -144,28 +160,36 @@ export const PostCard = defineComponent(
       card.setPointerCapture(event.pointerId);
       event.preventDefault();
     };
-    const moveSceneDrag = (event: PointerEvent) => {
+    const updateSceneDragPosition = (event: PointerEvent) => {
       if (!sceneDrag || sceneDrag.pointerId !== event.pointerId) return;
       const x = sceneDrag.startX + ((event.clientX - sceneDrag.startClientX) / sceneDrag.viewportWidth) * 100;
       const y = sceneDrag.startY + ((event.clientY - sceneDrag.startClientY) / sceneDrag.viewportHeight) * 100;
       sceneDrag.x = Math.min(sceneDrag.maxX, Math.max(sceneDrag.minX, x));
       sceneDrag.y = Math.min(sceneDrag.maxY, Math.max(sceneDrag.minY, y));
+    };
+    const moveSceneDrag = (event: PointerEvent) => {
+      if (!sceneDrag || sceneDrag.pointerId !== event.pointerId) return;
+      updateSceneDragPosition(event);
       if (sceneDragFrame === undefined) sceneDragFrame = requestAnimationFrame(paintSceneDrag);
     };
     const endSceneDrag = (event: PointerEvent) => {
       if (!sceneDrag || sceneDrag.pointerId !== event.pointerId) return;
-      const { card } = sceneDrag;
-      if (card.hasPointerCapture(event.pointerId)) card.releasePointerCapture(event.pointerId);
+      // Pointerup may arrive before the last queued animation frame. Capture
+      // its final position; cancellation/capture loss keeps the last move.
+      if (event.type === "pointerup") updateSceneDragPosition(event);
+      const drag = sceneDrag;
+      sceneDrag = null;
+      const { card } = drag;
       if (sceneDragFrame !== undefined) cancelAnimationFrame(sceneDragFrame);
       sceneDragFrame = undefined;
-      const x = Math.round(sceneDrag.x * 100) / 100;
-      const y = Math.round(sceneDrag.y * 100) / 100;
+      const x = Math.round(drag.x * 100) / 100;
+      const y = Math.round(drag.y * 100) / 100;
       rootRef.value?.style.setProperty("--scene-card-x", `${x}%`);
       rootRef.value?.style.setProperty("--scene-card-y", `${y}%`);
-      card.style.removeProperty("translate");
+      card.style.removeProperty("transform");
       card.classList.remove("post-card-inner-dragging");
-      props.onSceneCardMove(x, y);
-      sceneDrag = null;
+      if (card.hasPointerCapture(event.pointerId)) card.releasePointerCapture(event.pointerId);
+      if (x !== drag.startX || y !== drag.startY) props.onSceneCardMove(x, y);
     };
     const measure = () => {
       const node = copyRef.value;
@@ -179,7 +203,7 @@ export const PostCard = defineComponent(
       const content = contentRef.value;
       const aspectRatio = imageAspectRatio.value;
       if (!props.image || !content || !aspectRatio) return;
-      const heightBasis = imageHeightBasisFor(props.state.ratio);
+      const heightBasis = imageHeightBasisFor(props.state);
       const nextFrameMaxHeight = content.clientWidth / aspectRatio;
       if (
         imageFrameMaxHeight.value === null ||
@@ -192,6 +216,9 @@ export const PostCard = defineComponent(
         contentHeight: content.clientHeight,
         imageAspectRatio: aspectRatio,
         heightBasis,
+        reservedHeight: props.state.visualStyle === "folio" && props.state.canvasStyle === "scene" && props.state.sceneCardRatio === "4:3"
+          ? (copyRef.value?.scrollHeight ?? 0) + 15
+          : 0,
       });
       if (limit === reportedImageScaleLimit) return;
       reportedImageScaleLimit = limit;
@@ -246,7 +273,10 @@ export const PostCard = defineComponent(
         props.image,
         props.state.fontScale,
         props.state.lineHeightScale,
+        props.state.sceneCardHeight,
         props.state.sceneCardPadding,
+        props.state.sceneCardRatio,
+        props.state.canvasStyle,
         props.state.ratio,
         props.state.visualStyle,
         props.pageText,
@@ -273,9 +303,12 @@ export const PostCard = defineComponent(
         props.state.showSignature && Boolean(signatureText.value);
       const hasBackdrop = usesBackdrop();
       const isFolio = props.state.visualStyle === "folio";
+      const sceneCardBaseHeightValue = sceneCardBaseHeight(props.state.sceneCardRatio);
+      const sceneCardHeightScale = props.state.sceneCardHeight / 100;
+      const sceneCardScale = props.state.sceneCardScale / 100;
       const paddingScale = props.state.sceneCardPadding / 100;
       const [scenePaddingTop, scenePaddingRight, scenePaddingBottom, scenePaddingLeft] = sceneCardPaddingBase(props.state, isFolio);
-      const imageHeightBasis = imageHeightBasisFor(props.state.ratio);
+      const imageHeightBasis = imageHeightBasisFor(props.state);
       const imageHeight = imageHeightBasis * (props.state.imageScale / 100);
       const contentImage = props.image && (
         <div
@@ -313,6 +346,7 @@ export const PostCard = defineComponent(
             `post-card-${props.state.ratio.replace(":", "-")}`,
             props.state.exportMode === "douyin-cover" && "post-card-douyin-cover",
             hasBackdrop && "post-card-scene",
+            hasBackdrop && props.state.sceneCardRatio === "4:3" && "post-card-scene-landscape",
             isFolio && "post-card-folio",
             props.image && "post-card-has-image",
             props.renderMode === "export" && "post-card-export-source",
@@ -324,7 +358,10 @@ export const PostCard = defineComponent(
             "--copy-scale": props.state.fontScale / 100,
             "--copy-line-height-scale": props.state.lineHeightScale / 100,
             "--scene-overlay": props.state.sceneOverlay / 100,
-            "--scene-card-scale": props.state.sceneCardScale / 100,
+            "--scene-card-scale": sceneCardScale,
+            "--scene-card-height-scale": sceneCardHeightScale,
+            "--scene-card-height": `${sceneCardBaseHeightValue * sceneCardHeightScale}px`,
+            "--scene-card-anchor-offset": `${sceneCardBaseHeightValue * sceneCardScale / 2}px`,
             "--scene-card-padding-top": `${scenePaddingTop * paddingScale}px`,
             "--scene-card-padding-right": `${scenePaddingRight * paddingScale}px`,
             "--scene-card-padding-bottom": `${scenePaddingBottom * paddingScale}px`,
@@ -355,6 +392,8 @@ export const PostCard = defineComponent(
               onPointermove={hasBackdrop && props.renderMode !== "export" ? moveSceneDrag : undefined}
               onPointerup={hasBackdrop && props.renderMode !== "export" ? endSceneDrag : undefined}
               onPointercancel={hasBackdrop && props.renderMode !== "export" ? endSceneDrag : undefined}
+              onLostpointercapture={hasBackdrop && props.renderMode !== "export" ? endSceneDrag : undefined}
+              onDragstart={hasBackdrop ? (event: DragEvent) => event.preventDefault() : undefined}
             >
             {isFolio ? (
               <header class="post-author post-social-author">
@@ -407,10 +446,10 @@ export const PostCard = defineComponent(
             </div>
             {isFolio && (
               <div class="post-social-actions" aria-hidden="true">
-                <span><MessageCircle /><b>{props.state.socialReplies}</b></span>
-                <span><Repeat2 /><b>{props.state.socialReposts}</b></span>
-                <span><Heart /><b>{props.state.socialLikes}</b></span>
-                <span><BarChart3 /><b>{props.state.socialViews}</b></span>
+                <span><MessageCircle />{props.state.socialReplies && <b><span>{props.state.socialReplies}</span></b>}</span>
+                <span><Repeat2 />{props.state.socialReposts && <b><span>{props.state.socialReposts}</span></b>}</span>
+                <span><Heart />{props.state.socialLikes && <b><span>{props.state.socialLikes}</span></b>}</span>
+                <span><BarChart3 />{props.state.socialViews && <b><span>{props.state.socialViews}</span></b>}</span>
                 <span><Bookmark /></span>
                 <span><Share /></span>
               </div>

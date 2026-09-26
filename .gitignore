@@ -1,4 +1,5 @@
 node_modules
+.bymark-local-data
 dist
 test-results
 tests/.qa-artifacts

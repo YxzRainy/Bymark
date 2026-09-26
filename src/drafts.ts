@@ -1,4 +1,5 @@
 import { normalizeState, normalizeWorkTitle, resolvedTitleFor, textTitleFor, type BymarkState } from "./bymark";
+import { isSharedStorageEnabled, loadSharedValue, removeSharedValue, saveSharedValue } from './sharedStorage.ts';
 
 export interface DraftSnapshot {
   state: BymarkState;
@@ -176,6 +177,9 @@ async function readDrafts(name = DRAFT_DB_NAME) {
 }
 
 export async function loadDrafts() {
+  if (isSharedStorageEnabled()) {
+    return sortDrafts((await loadSharedValue('drafts')).map(normalizeDraft));
+  }
   const drafts = await readDrafts();
   if (drafts.length) {
     // Rewrite legacy records once so hidden image-heavy version arrays are removed.
@@ -191,6 +195,10 @@ export async function loadDrafts() {
 }
 
 export async function saveDraft(draft: Draft) {
+  if (isSharedStorageEnabled()) {
+    await saveSharedValue('drafts', JSON.parse(JSON.stringify(draft)), draft.id);
+    return;
+  }
   const database = await openDraftDatabase();
   return new Promise<void>((resolve, reject) => {
     // Vue wraps entries read from a ref in proxies. IndexedDB cannot clone a
@@ -209,6 +217,10 @@ export async function saveDraft(draft: Draft) {
 }
 
 export async function removeDraft(id: string) {
+  if (isSharedStorageEnabled()) {
+    await removeSharedValue('drafts', id);
+    return;
+  }
   const database = await openDraftDatabase();
   return new Promise<void>((resolve, reject) => {
     const request = database.transaction(DRAFT_STORE_NAME, "readwrite").objectStore(DRAFT_STORE_NAME).delete(id);

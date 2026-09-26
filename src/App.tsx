@@ -54,6 +54,8 @@ import { createNextIssueState } from "./nextIssue";
 import { IMAGE_SCALE_MAX, IMAGE_SCALE_MIN } from "./imageScale";
 import { PAGE_BREAK_MARKER, paginateMarkdownDetailed, setManualBreakBefore, type PaginatedPage } from "./pagination";
 import { createWorkspaceExport, mergeById, parseWorkspaceExport } from "./workspace";
+import { UpdateIndicator } from "./components/UpdateIndicator";
+import { isSharedStorageEnabled, saveSharedValue, sharedInitialValue } from './sharedStorage.ts';
 
 export type { ExportFormat, ExportResolution } from "./exportOptions";
 type Notice = {
@@ -172,10 +174,12 @@ const EXPORT_PREFERENCES_KEY = "bymark-export-preferences-v1";
 
 function loadExportPreferences(): { format: ExportFormat; resolution: ExportResolution } {
   try {
-    const value = JSON.parse(localStorage.getItem(EXPORT_PREFERENCES_KEY) ?? "null") as Partial<{ format: ExportFormat; resolution: ExportResolution }> | null;
+    const value = isSharedStorageEnabled()
+      ? sharedInitialValue('exportPreferences')
+      : JSON.parse(localStorage.getItem(EXPORT_PREFERENCES_KEY) ?? "null") as Partial<{ format: ExportFormat; resolution: ExportResolution }> | null;
     return {
       format: value?.format === "jpg" ? "jpg" : DEFAULT_EXPORT_SETTINGS.format,
-      resolution: [1024, 2048, 3072, 4096].includes(value?.resolution as number) ? value!.resolution! : DEFAULT_EXPORT_SETTINGS.resolution,
+      resolution: [1024, 2048, 3072, 4096].includes(value?.resolution as number) ? value!.resolution as ExportResolution : DEFAULT_EXPORT_SETTINGS.resolution,
     };
   } catch {
     return { ...DEFAULT_EXPORT_SETTINGS };
@@ -184,6 +188,7 @@ function loadExportPreferences(): { format: ExportFormat; resolution: ExportReso
 
 function saveExportPreferences(format: ExportFormat, resolution: ExportResolution) {
   try { localStorage.setItem(EXPORT_PREFERENCES_KEY, JSON.stringify({ format, resolution })); } catch { /* optional preference */ }
+  if (isSharedStorageEnabled()) void saveSharedValue('exportPreferences', { format, resolution }).catch(console.error);
 }
 
 function encodeCanvas(canvas: HTMLCanvasElement, format: ExportFormat) {
@@ -254,6 +259,7 @@ export default defineComponent(() => {
     visualStyle: state.value.visualStyle,
     canvasStyle: state.value.canvasStyle,
     sceneCardRatio: state.value.sceneCardRatio,
+    sceneCardHeight: state.value.sceneCardHeight,
     capacityScale: paginationCapacityScale.value,
     hasImage: Boolean(image.value),
   }));
@@ -283,6 +289,7 @@ export default defineComponent(() => {
     "visualStyle",
     "canvasStyle",
     "sceneCardRatio",
+    "sceneCardHeight",
     "sceneCardPadding",
   ]);
   const update = <K extends keyof BymarkState>(key: K, value: BymarkState[K]) => {
@@ -1139,11 +1146,15 @@ export default defineComponent(() => {
     if (autoSaveTimer) window.clearTimeout(autoSaveTimer);
     if (workspaceTransitionTimer) window.clearTimeout(workspaceTransitionTimer);
   });
+  // Persist in the same tick as the control change. Besides avoiding a lost
+  // final edit when the page is refreshed immediately, this also makes every
+  // geometry slider (including scene card height/position) true write-through
+  // configuration instead of relying on the next Vue render cycle.
   watch(state, (next) => {
     saveState(next);
     document.documentElement.style.colorScheme = next.theme === "dark" ? "dark" : "light";
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", next.theme === "dark" ? "#0b0c0d" : next.theme === "white" ? "#f4f5f6" : "#ece2d3");
-  }, { deep: true, immediate: true });
+  }, { deep: true, immediate: true, flush: "sync" });
   watch([avatar, avatarReady], () => {
     if (avatarReady.value) queueAvatarSave(avatar.value);
   });
@@ -1151,7 +1162,7 @@ export default defineComponent(() => {
   watch(sceneImage, (value) => queueImageSave(SCENE_IMAGE_ASSET_KEY, value));
   watch([exportFormat, exportResolution], ([format, resolution]) => {
     saveExportPreferences(format, resolution);
-  });
+  }, { flush: "sync" });
   watch([state, avatar, image, sceneImage], scheduleAutoSave, { deep: true });
   watch(image, () => (imageScaleMax.value = IMAGE_SCALE_MAX));
   watch(
@@ -1164,6 +1175,7 @@ export default defineComponent(() => {
       state.value.visualStyle,
       state.value.canvasStyle,
       state.value.sceneCardRatio,
+      state.value.sceneCardHeight,
       state.value.sceneCardPadding,
       Boolean(image.value),
     ],
@@ -1198,7 +1210,10 @@ export default defineComponent(() => {
       >
         <header class="mobile-brand-lockup">
           <img class="mobile-brand-mark" src="/icon-192.png" width="32" height="32" alt="留印图标" />
-          <div class="brand-copy"><h1>留印 / Bymark</h1></div>
+          <div class="brand-copy">
+            <h1>留印</h1>
+            <UpdateIndicator />
+          </div>
           <ThemeToggle theme={state.value.theme} onChange={(theme) => update("theme", theme)} />
         </header>
         <nav class="mobile-mode-switch" aria-label="移动端工作区">

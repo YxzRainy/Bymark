@@ -7,10 +7,11 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --port 5174",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "unit": "node --experimental-strip-types tests/unit.mjs",
+    "test:shared": "node tests/shared-storage.mjs",
     "qa": "node tests/run-qa.mjs",
     "qa:export": "node tests/run-qa.mjs tests/export-consistency.mjs",
     "preview": "vite preview"

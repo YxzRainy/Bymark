@@ -187,6 +187,7 @@ export const PreviewStage = defineComponent(
         () => props.state.visualStyle,
         () => props.state.sceneCardY,
         () => props.state.sceneCardScale,
+        () => props.state.sceneCardHeight,
         () => props.state.sceneCardPadding,
         () => props.state.sceneCardRatio,
         () => props.state.showTime,

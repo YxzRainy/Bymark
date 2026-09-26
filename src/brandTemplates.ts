@@ -1,6 +1,7 @@
 import type { BymarkState } from "./bymark";
-import { DEFAULT_IMAGE_SCALE, DEFAULT_SCENE_CARD_PADDING, SCENE_CARD_PADDING_MAX, SCENE_CARD_PADDING_MIN, themeLabel } from "./default-settings.ts";
+import { DEFAULT_IMAGE_SCALE, DEFAULT_SCENE_CARD_HEIGHT, DEFAULT_SCENE_CARD_PADDING, SCENE_CARD_HEIGHT_MAX, SCENE_CARD_HEIGHT_MIN, SCENE_CARD_PADDING_MAX, SCENE_CARD_PADDING_MIN, themeLabel } from "./default-settings.ts";
 import { normalizeSceneBackdrop } from "./sceneBackdrops.ts";
+import { isSharedStorageEnabled, loadSharedValue, removeSharedValue, saveSharedValue } from './sharedStorage.ts';
 
 export type BrandProfile = Pick<
   BymarkState,
@@ -27,6 +28,7 @@ export type BrandProfile = Pick<
   | "sceneFocus"
   | "sceneCardRatio"
   | "sceneCardScale"
+  | "sceneCardHeight"
   | "sceneCardPadding"
   | "sceneCardX"
   | "sceneCardY"
@@ -85,6 +87,7 @@ export const brandProfileFor = (state: BymarkState): BrandProfile => ({
   sceneFocus: state.sceneFocus,
   sceneCardRatio: state.sceneCardRatio,
   sceneCardScale: state.sceneCardScale,
+  sceneCardHeight: state.sceneCardHeight,
   sceneCardPadding: state.sceneCardPadding,
   sceneCardX: state.sceneCardX,
   sceneCardY: state.sceneCardY,
@@ -126,6 +129,9 @@ function normalizeBrandTemplate(value: BrandTemplate): BrandTemplate {
           ? profile.sceneCardRatio
           : "3:4",
       sceneCardScale: typeof profile.sceneCardScale === "number" ? Math.min(100, Math.max(70, profile.sceneCardScale)) : 100,
+      sceneCardHeight: typeof profile.sceneCardHeight === "number"
+        ? Math.min(SCENE_CARD_HEIGHT_MAX, Math.max(SCENE_CARD_HEIGHT_MIN, Math.round(profile.sceneCardHeight)))
+        : DEFAULT_SCENE_CARD_HEIGHT,
       sceneCardPadding: typeof profile.sceneCardPadding === "number"
         ? Math.min(SCENE_CARD_PADDING_MAX, Math.max(SCENE_CARD_PADDING_MIN, Math.round(profile.sceneCardPadding)))
         : DEFAULT_SCENE_CARD_PADDING,
@@ -164,6 +170,9 @@ async function readBrandTemplates(name = DATABASE) {
 }
 
 export async function loadBrandTemplates() {
+  if (isSharedStorageEnabled()) {
+    return (await loadSharedValue('brandTemplates')).map(normalizeBrandTemplate).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  }
   const templates = await readBrandTemplates();
   if (templates.length) return templates;
 
@@ -175,6 +184,10 @@ export async function loadBrandTemplates() {
 }
 
 export async function saveBrandTemplate(template: BrandTemplate) {
+  if (isSharedStorageEnabled()) {
+    await saveSharedValue('brandTemplates', JSON.parse(JSON.stringify(template)), template.id);
+    return;
+  }
   const database = await openDatabase();
   return new Promise<void>((resolve, reject) => {
     const request = database.transaction(STORE, "readwrite").objectStore(STORE).put(template);
@@ -190,6 +203,10 @@ export async function saveBrandTemplate(template: BrandTemplate) {
 }
 
 export async function removeBrandTemplate(id: string) {
+  if (isSharedStorageEnabled()) {
+    await removeSharedValue('brandTemplates', id);
+    return;
+  }
   const database = await openDatabase();
   return new Promise<void>((resolve, reject) => {
     const request = database.transaction(STORE, "readwrite").objectStore(STORE).delete(id);

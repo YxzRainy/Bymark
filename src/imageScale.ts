@@ -6,8 +6,9 @@ export function imageScaleLimitForFrame(options: {
   contentHeight: number;
   imageAspectRatio: number;
   heightBasis: number;
+  reservedHeight?: number;
 }) {
-  const { contentWidth, contentHeight, imageAspectRatio, heightBasis } = options;
+  const { contentWidth, contentHeight, imageAspectRatio, heightBasis, reservedHeight = 0 } = options;
   if (
     contentWidth <= 0 ||
     contentHeight <= 0 ||
@@ -17,7 +18,7 @@ export function imageScaleLimitForFrame(options: {
     return IMAGE_SCALE_MAX;
   }
 
-  const maximumImageHeight = contentWidth / imageAspectRatio;
+  const maximumImageHeight = Math.min(contentWidth / imageAspectRatio, contentHeight - reservedHeight);
   const imageHeightAt100 = contentHeight * (heightBasis / 100);
   const limit = Math.floor((maximumImageHeight / imageHeightAt100) * 100);
   return Math.min(IMAGE_SCALE_MAX, Math.max(IMAGE_SCALE_MIN, limit));

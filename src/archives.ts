@@ -1,4 +1,5 @@
 import { normalizeState, resolvedTitleFor, type BymarkState } from "./bymark";
+import { isSharedStorageEnabled, loadSharedValue, removeSharedValue, saveSharedValue } from './sharedStorage.ts';
 
 export interface Archive {
   id: string;
@@ -112,6 +113,9 @@ export function archiveCollectionMarkdown(archives: Archive[]) {
 }
 
 export async function loadArchives() {
+  if (isSharedStorageEnabled()) {
+    return sortArchives((await loadSharedValue('archives')).map(normalizeArchive));
+  }
   const database = await openArchiveDatabase();
   return new Promise<Archive[]>((resolve, reject) => {
     const request = database.transaction(ARCHIVE_STORE_NAME, "readonly").objectStore(ARCHIVE_STORE_NAME).getAll();
@@ -127,6 +131,10 @@ export async function loadArchives() {
 }
 
 export async function saveArchive(archive: Archive) {
+  if (isSharedStorageEnabled()) {
+    await saveSharedValue('archives', JSON.parse(JSON.stringify(archive)), archive.id);
+    return;
+  }
   const database = await openArchiveDatabase();
   return new Promise<void>((resolve, reject) => {
     const stored = JSON.parse(JSON.stringify(archive)) as Archive;
@@ -143,6 +151,10 @@ export async function saveArchive(archive: Archive) {
 }
 
 export async function removeArchive(id: string) {
+  if (isSharedStorageEnabled()) {
+    await removeSharedValue('archives', id);
+    return;
+  }
   const database = await openArchiveDatabase();
   return new Promise<void>((resolve, reject) => {
     const request = database.transaction(ARCHIVE_STORE_NAME, "readwrite").objectStore(ARCHIVE_STORE_NAME).delete(id);

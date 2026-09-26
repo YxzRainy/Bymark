@@ -38,6 +38,7 @@ import type { ExportEstimate, ExportFormat, ExportResolution } from "../exportOp
 import { markdownToPlainText } from "../markdown";
 import { PAGE_BREAK_MARKER } from "../pagination";
 import type { BymarkState } from "../bymark";
+import { UpdateIndicator } from "./UpdateIndicator";
 import { ASPECT_PRESETS, WORK_TITLE_MAX_LENGTH } from "../bymark";
 import { IMAGE_SCALE_MAX, IMAGE_SCALE_MIN } from "../imageScale";
 import { countCharacters, countChineseCharacters } from "../textMetrics";
@@ -168,6 +169,8 @@ export const EditorPanel = defineComponent(
       selectionStart: number;
       selectionEnd: number;
     } | null>(null);
+    const hasTextSelection = shallowRef(false);
+    let lastTextPointer: { type: string; time: number } | null = null;
     let copyStateTimer: number | undefined;
     let textAreaAnchorFrame: number | undefined;
     let measuredTextLength = props.state.text.length;
@@ -285,6 +288,7 @@ export const EditorPanel = defineComponent(
         if (!area) return;
         area.focus();
         area.setSelectionRange(start, end);
+        hasTextSelection.value = start !== end;
       });
     };
     const undoText = () => {
@@ -471,8 +475,22 @@ export const EditorPanel = defineComponent(
       };
     };
     const openTextFormatMenuOnContext = (event: MouseEvent) => {
+      const pointerType = typeof PointerEvent !== "undefined" && event instanceof PointerEvent ? event.pointerType : "";
+      const recentTouch = lastTextPointer?.type === "touch" && performance.now() - lastTextPointer.time < 2000;
+      if (pointerType === "touch" || recentTouch || (!pointerType && !lastTextPointer && window.matchMedia("(hover: none) and (pointer: coarse)").matches)) {
+        closeTextFormatMenu();
+        return;
+      }
       event.preventDefault();
       openTextFormatMenu(event);
+    };
+    const currentTextSelection = () => {
+      const area = textAreaRef.value;
+      if (!area) return null;
+      return textFormatMenu.value ?? {
+        selectionStart: area.selectionStart,
+        selectionEnd: area.selectionEnd,
+      };
     };
     const runTextFormatAction = (action: "undo" | "redo" | "bold" | "italic" | "heading" | "quote" | "unordered-list" | "ordered-list") => {
       const menu = textFormatMenu.value;
@@ -491,23 +509,23 @@ export const EditorPanel = defineComponent(
       closeTextFormatMenu();
     };
     const copyTextSelection = async () => {
-      const menu = textFormatMenu.value;
-      if (!menu || menu.selectionStart === menu.selectionEnd || !navigator.clipboard?.writeText) return;
+      const selection = currentTextSelection();
+      if (!selection || selection.selectionStart === selection.selectionEnd || !navigator.clipboard?.writeText) return;
       try {
-        await navigator.clipboard.writeText(props.state.text.slice(menu.selectionStart, menu.selectionEnd));
+        await navigator.clipboard.writeText(props.state.text.slice(selection.selectionStart, selection.selectionEnd));
         closeTextFormatMenu();
       } catch {
         // Clipboard access can be denied by the browser; keep the menu open.
       }
     };
     const cutTextSelection = async () => {
-      const menu = textFormatMenu.value;
-      if (!menu || menu.selectionStart === menu.selectionEnd || !navigator.clipboard?.writeText) return;
+      const selection = currentTextSelection();
+      if (!selection || selection.selectionStart === selection.selectionEnd || !navigator.clipboard?.writeText) return;
       try {
-        await navigator.clipboard.writeText(props.state.text.slice(menu.selectionStart, menu.selectionEnd));
+        await navigator.clipboard.writeText(props.state.text.slice(selection.selectionStart, selection.selectionEnd));
         replaceSelection(
-          `${props.state.text.slice(0, menu.selectionStart)}${props.state.text.slice(menu.selectionEnd)}`,
-          menu.selectionStart,
+          `${props.state.text.slice(0, selection.selectionStart)}${props.state.text.slice(selection.selectionEnd)}`,
+          selection.selectionStart,
         );
         closeTextFormatMenu();
       } catch {
@@ -515,13 +533,13 @@ export const EditorPanel = defineComponent(
       }
     };
     const pasteTextSelection = async () => {
-      const menu = textFormatMenu.value;
-      if (!menu || !navigator.clipboard?.readText) return;
+      const selection = currentTextSelection();
+      if (!selection || !navigator.clipboard?.readText) return;
       try {
         const clipboardText = await navigator.clipboard.readText();
         replaceSelection(
-          `${props.state.text.slice(0, menu.selectionStart)}${clipboardText}${props.state.text.slice(menu.selectionEnd)}`,
-          menu.selectionStart + clipboardText.length,
+          `${props.state.text.slice(0, selection.selectionStart)}${clipboardText}${props.state.text.slice(selection.selectionEnd)}`,
+          selection.selectionStart + clipboardText.length,
         );
         closeTextFormatMenu();
       } catch {
@@ -592,7 +610,8 @@ export const EditorPanel = defineComponent(
         <header class="brand-lockup">
           <img class="brand-mark" src="/icon-192.png" width="32" height="32" alt="留印图标" />
           <div class="brand-copy">
-            <h1>留印 / Bymark</h1>
+            <h1>留印</h1>
+            <UpdateIndicator />
           </div>
           <ThemeToggle theme={props.state.theme} onChange={(theme) => props.update("theme", theme)} />
           <button type="button" class="archive-nav-button" onClick={props.onOpenArchive} aria-label="打开归档" title="打开归档">
@@ -636,12 +655,22 @@ export const EditorPanel = defineComponent(
                     <span>约 {readingMinutes()} 分钟</span>
                   </span>
                 </div>
-                <div class="markdown-toolbar" role="toolbar" aria-label="Markdown 格式工具">
+                <div class="markdown-toolbar" role="toolbar" aria-label="正文编辑工具">
                   <button class="icon-tooltip icon-tooltip-start" type="button" aria-label="撤销" data-tooltip="撤销（⌘/Ctrl + Z）" disabled={textPast.value.length === 0} onClick={undoText}>
                     <Undo2 size={15} />
                   </button>
                   <button class="icon-tooltip" type="button" aria-label="重做" data-tooltip="重做（⌘/Ctrl + Shift + Z）" disabled={textFuture.value.length === 0} onClick={redoText}>
                     <Redo2 size={15} />
+                  </button>
+                  <span aria-hidden="true" />
+                  <button class="icon-tooltip" type="button" aria-label="剪切" data-tooltip="剪切（⌘/Ctrl + X）" disabled={!hasTextSelection.value || !navigator.clipboard?.writeText} onClick={cutTextSelection}>
+                    <Scissors size={15} />
+                  </button>
+                  <button class="icon-tooltip" type="button" aria-label="复制" data-tooltip="复制（⌘/Ctrl + C）" disabled={!hasTextSelection.value || !navigator.clipboard?.writeText} onClick={copyTextSelection}>
+                    <Copy size={15} />
+                  </button>
+                  <button class="icon-tooltip" type="button" aria-label="粘贴" data-tooltip="粘贴（⌘/Ctrl + V）" disabled={!navigator.clipboard?.readText} onClick={pasteTextSelection}>
+                    <ClipboardPaste size={15} />
                   </button>
                   <span aria-hidden="true" />
                   <button class="icon-tooltip" type="button" aria-label="加粗" data-tooltip="加粗（⌘/Ctrl + B）" onClick={() => applyInlineFormat("**")}>
@@ -683,6 +712,16 @@ export const EditorPanel = defineComponent(
                   value={props.state.text}
                   onInput={onTextInput}
                   onKeydown={onTextKeyDown}
+                  onSelect={(event: Event) => {
+                    const area = event.currentTarget as HTMLTextAreaElement;
+                    hasTextSelection.value = area.selectionStart !== area.selectionEnd;
+                  }}
+                  onPointerdown={(event: PointerEvent) => {
+                    lastTextPointer = { type: event.pointerType, time: performance.now() };
+                  }}
+                  onTouchstart={() => {
+                    lastTextPointer = { type: "touch", time: performance.now() };
+                  }}
                   onContextmenu={openTextFormatMenuOnContext}
                   placeholder="在这里留下你的文字。"
                   rows={9}

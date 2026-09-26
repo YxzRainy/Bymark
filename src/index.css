@@ -129,6 +129,9 @@ textarea:focus-visible {
 .brand-copy {
   min-width: 0;
   flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
 
 .brand-copy h1 {
@@ -152,6 +155,66 @@ textarea:focus-visible {
   color: var(--muted);
   font-size: 11px;
   letter-spacing: 0.04em;
+}
+
+.version-update-indicator {
+  min-width: 0;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px 3px 6px;
+  color: #b7e56d;
+  background: color-mix(in srgb, #8fbe49 13%, transparent);
+  border: 1px solid color-mix(in srgb, #a7d85e 36%, transparent);
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 650;
+  letter-spacing: 0.025em;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.version-update-indicator:hover {
+  color: #d2f79a;
+  background: color-mix(in srgb, #8fbe49 21%, transparent);
+  border-color: color-mix(in srgb, #b7e56d 58%, transparent);
+  transform: translateY(-1px);
+}
+
+.version-update-indicator:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.version-update-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  background: #9fd452;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #9fd452 14%, transparent);
+}
+
+.version-update-arrow {
+  flex: 0 0 auto;
+  stroke-width: 1.8;
+}
+
+.app-shell.ui-light .version-update-indicator,
+.app-shell.ui-white .version-update-indicator {
+  color: #567a23;
+  background: rgba(112, 151, 52, 0.1);
+  border-color: rgba(100, 139, 43, 0.27);
+}
+
+.app-shell.ui-light .version-update-indicator:hover,
+.app-shell.ui-white .version-update-indicator:hover {
+  color: #3f6214;
+  background: rgba(112, 151, 52, 0.16);
+  border-color: rgba(100, 139, 43, 0.42);
 }
 
 .quick-theme {
@@ -734,6 +797,7 @@ textarea:focus-visible {
 .markdown-toolbar {
   min-height: 35px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 3px;
   margin: 0 0 7px;
@@ -753,6 +817,7 @@ textarea:focus-visible {
 .markdown-toolbar button {
   width: 27px;
   height: 27px;
+  flex: 0 0 auto;
   display: grid;
   place-items: center;
   padding: 0;
@@ -768,6 +833,11 @@ textarea:focus-visible {
   color: var(--text);
   outline: none;
   background: var(--control-hover);
+}
+
+.markdown-toolbar button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
 }
 
 .markdown-toolbar > button:first-of-type {
@@ -973,12 +1043,19 @@ textarea:focus-visible {
 }
 
 @media (max-width: 460px) {
-  .markdown-toolbar {
-    flex-wrap: wrap;
+  .markdown-toolbar .insert-page-break {
+    margin-left: 0;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .markdown-toolbar button {
+    width: 34px;
+    height: 34px;
   }
 
   .markdown-toolbar .insert-page-break {
-    margin-left: 0;
+    width: auto;
   }
 }
 
@@ -3056,8 +3133,6 @@ textarea:focus-visible {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  /* 头像素材自带留白，放大让人物占满圆形框 */
-  transform: scale(1.35);
 }
 
 .post-card-dark .post-avatar {
@@ -3114,7 +3189,7 @@ textarea:focus-visible {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  margin-top: 32px;
+  margin-top: 24px;
 }
 
 .post-copy {
@@ -3897,6 +3972,15 @@ textarea:focus-visible {
     border-bottom: 1px solid var(--line);
   }
 
+  .mobile-brand-lockup .brand-copy {
+    overflow: hidden;
+  }
+
+  .mobile-brand-lockup .brand-copy h1 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .editor-panel > .brand-lockup {
     display: none;
   }
@@ -4385,9 +4469,9 @@ textarea:focus-visible {
   /* Scene mode changes only the card's frame and placement. Its descendants
      keep the plain card's typography and spacing rules. */
   width: 72%;
-  height: auto;
+  height: var(--scene-card-height, auto);
   position: absolute;
-  top: var(--scene-card-y, 50%);
+  top: calc(var(--scene-card-y, 50%) - var(--scene-card-anchor-offset, 0px));
   left: var(--scene-card-x, 50%);
   aspect-ratio: var(--scene-card-ratio, 3 / 4);
   padding:
@@ -4402,17 +4486,27 @@ textarea:focus-visible {
   pointer-events: auto;
   cursor: grab;
   touch-action: none;
-  translate: -50% -50%;
+  translate: -50% 0;
   scale: var(--scene-card-scale, 1);
-  transform-origin: center;
+  transform-origin: center top;
 }
 
 .post-card-scene .post-card-inner:active {
   cursor: grabbing;
 }
 
+/* Prepare the preview's compositor layer before pointerdown, so lifting the
+   image/text card does not require rasterizing it on the first drag frame.
+   Measurement and export cards do not need a persistent GPU layer. */
+.post-card-scene:not(.post-card-export-source):not([data-pagination-probe]) .post-card-inner {
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .post-card-scene .post-card-inner-dragging {
-  will-change: translate;
+  cursor: grabbing;
 }
 
 .post-card-scene.post-card-dark .post-card-inner {
@@ -4513,6 +4607,17 @@ textarea:focus-visible {
   gap: 0;
 }
 
+/* A landscape floating social card has far less vertical space for the copy
+   and photo. Keep the action row compact so the image scale remains useful. */
+.post-card-folio.post-card-scene-landscape.post-card-has-image .post-content {
+  margin-top: 16px;
+}
+
+.post-card-folio.post-card-scene-landscape.post-card-has-image .post-social-actions {
+  padding-top: 12px;
+  padding-bottom: 14px;
+}
+
 .post-social-actions {
   order: 3;
   flex: 0 0 auto;
@@ -4558,18 +4663,26 @@ textarea:focus-visible {
 }
 
 .post-social-actions b {
+  /* html-to-image freezes the browser's measured inline width on every cloned
+     node. Fractional font-metric differences inside the exported SVG can then
+     make a shrink-wrapped label overflow by a fraction of a pixel. Reserve a
+     stable label box so normal compact metrics survive the clone while truly
+     long custom values still truncate inside their grid track. */
+  min-width: 4.5em;
   overflow: hidden;
   font-size: 12px;
   line-height: 1.1;
   font-weight: 500;
   letter-spacing: 0.01em;
-  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.post-social-actions b:empty {
-  display: none;
+.post-social-actions b > span {
+  /* html-to-image preserves fractional sizes through the computed `font`
+     shorthand. Keep the numeric variant on a child so the 12px label itself
+     still has a serializable shorthand; the child inherits that exact size. */
+  font-variant-numeric: tabular-nums;
 }
 
 .post-card-folio.post-card-scene.post-card-douyin-cover .post-card-inner {
@@ -4661,6 +4774,7 @@ textarea:focus-visible {
 }
 
 .scene-card-scale-control,
+.scene-card-height-control,
 .scene-card-padding-control,
 .scene-overlay-control {
   grid-template-columns: 18px minmax(0, 1fr) 18px;
@@ -5868,8 +5982,17 @@ textarea:focus-visible {
 
 @media (max-width: 390px) {
   .export-dock-bar {
-    grid-template-columns: 72px minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: 106px minmax(0, 1fr) minmax(0, 1fr);
     gap: 6px;
+  }
+
+  .app-shell.mobile-mode-editor .export-settings-button {
+    padding-left: 45px;
+    padding-right: 3px;
+  }
+
+  .app-shell.mobile-mode-editor .export-settings-button > svg {
+    display: none;
   }
 }
 
@@ -6992,6 +7115,7 @@ html.export-time-dialog-open body {
   }
 
   .draft-mobile-trigger {
+    --draft-trigger-editor-lift: 0px;
     position: fixed;
     z-index: 34;
     left: max(16px, env(safe-area-inset-left));
@@ -6999,14 +7123,15 @@ html.export-time-dialog-open body {
       var(--bymark-visual-viewport-top, 0px) +
       var(--bymark-visual-viewport-height, 100dvh) -
       max(16px, env(safe-area-inset-bottom)) -
-      42px
+      42px - var(--draft-trigger-editor-lift)
     );
     bottom: auto;
     min-height: 42px;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 0;
     padding: 0 11px;
+    overflow: hidden;
     color: var(--text);
     background: color-mix(in srgb, var(--panel-raised) 92%, transparent);
     border: 1px solid var(--line-strong) !important;
@@ -7018,7 +7143,11 @@ html.export-time-dialog-open body {
     font-size: 11px;
     font-weight: 650;
     letter-spacing: 0.02em;
-    transition: opacity 180ms ease, transform 240ms cubic-bezier(0.22, 1, 0.36, 1), background-color 180ms ease;
+    transition: gap 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease, transform 240ms cubic-bezier(0.22, 1, 0.36, 1), background-color 180ms ease;
+  }
+
+  .app-shell.mobile-mode-editor .draft-mobile-trigger {
+    --draft-trigger-editor-lift: 14px;
   }
 
   .draft-mobile-trigger:active {
@@ -7028,6 +7157,29 @@ html.export-time-dialog-open body {
   .draft-mobile-trigger > svg {
     width: 16px;
     height: 16px;
+    flex: 0 0 auto;
+  }
+
+  .draft-mobile-trigger-details {
+    max-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+    opacity: 0;
+    white-space: nowrap;
+    transform: translateX(-6px);
+    transition: max-width 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease, transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .draft-mobile-trigger-expanded {
+    gap: 6px;
+  }
+
+  .draft-mobile-trigger-expanded .draft-mobile-trigger-details {
+    max-width: 120px;
+    opacity: 1;
+    transform: translateX(0);
   }
 
   .draft-mobile-trigger em {
@@ -7215,9 +7367,13 @@ html.export-time-dialog-open body {
   }
 
   .draft-library .workspace-tools {
-    grid-template-columns: 34px auto auto;
+    grid-template-columns: 40px auto auto;
+    grid-auto-rows: 40px;
     justify-content: space-between;
-    padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+    padding:
+      14px max(16px, env(safe-area-inset-right))
+      max(15px, calc(31px - env(safe-area-inset-bottom)))
+      max(16px, env(safe-area-inset-left));
   }
 
   .draft-library .workspace-summary {
@@ -7225,8 +7381,8 @@ html.export-time-dialog-open body {
   }
 
   .draft-mobile-footer-close {
-    width: 34px;
-    height: 34px;
+    width: 40px;
+    height: 40px;
     display: inline-grid;
     place-items: center;
     padding: 0;

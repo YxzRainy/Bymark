@@ -2,7 +2,7 @@ import { chromium } from 'playwright'
 import { mkdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
-const baseURL = process.env.BYMARK_URL || 'http://127.0.0.1:5173'
+const baseURL = process.env.BYMARK_URL || 'http://127.0.0.1:5174'
 const artifacts = path.resolve('test-results')
 await mkdir(artifacts, { recursive: true })
 
@@ -125,6 +125,7 @@ check(
     initialLocalSettings?.state?.imageAlignment === 'left' &&
     initialLocalSettings?.state?.imageScale === 126 &&
     initialLocalSettings?.state?.sceneBackdrop === 'lagoon' &&
+    initialLocalSettings?.state?.sceneCardHeight === 100 &&
     initialLocalSettings?.state?.sceneCardPadding === 40 &&
     initialLocalSettings?.state?.name === '失效样本' &&
     initialLocalSettings?.state?.userId === '@sample404' &&
@@ -183,6 +184,7 @@ check(
 
 check((await page.title()) === '留印', '页面标题正确')
 check(await page.locator('.brand-lockup').isVisible(), '品牌与核心用途首屏可见')
+check((await page.locator('.brand-lockup h1').innerText()) === '留印', '桌面品牌标题保持单一且简洁')
 check(
   (await page.locator('img.brand-mark').getAttribute('src')) === '/icon-192.png',
   '页面品牌图标与网站 ico 使用同一图案',
@@ -338,7 +340,7 @@ check(
   folioDefaultLayout.width === '576px' &&
     folioDefaultLayout.padding.join('|') === '24.8px|27.2px|20px|27.2px' &&
     folioDefaultLayout.avatarWidth === '76px' &&
-    folioDefaultLayout.contentMarginTop === '32px' &&
+    folioDefaultLayout.contentMarginTop === '24px' &&
     folioDefaultLayout.copyFontSize === '19.32px' &&
     folioDefaultLayout.actionsPadding.join('|') === '22px|24px' &&
     folioDefaultLayout.actionsBottomGap <= 1,
@@ -433,9 +435,9 @@ check(
 check(
   (await page.locator('.post-content:not(.pagination-probe *)').evaluate((node) => {
     const style = getComputedStyle(node)
-    return style.marginTop === '32px'
+    return style.marginTop === '24px'
   })),
-  '3:4 默认预设将正文上移 20px',
+  '3:4 默认预设将正文与作者区间距收紧至 24px',
 )
 check(
   (await page.locator('.post-copy:not(.pagination-probe *)').evaluate((node) => getComputedStyle(node).marginLeft)) === '5px',
@@ -1327,6 +1329,26 @@ await page.locator('.post-avatar img:not(.pagination-probe *)').waitFor({ state:
 await page.locator('.post-image-wrap img:not(.pagination-probe *)').waitFor({ state: 'visible' })
 check((await page.locator('.post-avatar img:not(.pagination-probe *)').count()) === 1, '头像上传后立即预览')
 check((await page.locator('.post-image-wrap img:not(.pagination-probe *)').count()) === 1, '正文配图上传后立即预览')
+const avatarRendering = await page.evaluate(() => {
+  const upload = document.querySelector('.upload-preview.avatar-preview img')
+  const preview = document.querySelector('.post-avatar img:not(.pagination-probe *)')
+  const uploadStyle = upload ? getComputedStyle(upload) : null
+  const previewStyle = preview ? getComputedStyle(preview) : null
+  return {
+    uploadFit: uploadStyle?.objectFit,
+    uploadTransform: uploadStyle?.transform,
+    previewFit: previewStyle?.objectFit,
+    previewTransform: previewStyle?.transform,
+  }
+})
+check(
+  avatarRendering.uploadFit === 'cover' &&
+    avatarRendering.previewFit === 'cover' &&
+    avatarRendering.uploadTransform === 'none' &&
+    avatarRendering.previewTransform === 'none',
+  '上传头像与卡片头像使用一致的裁切和缩放规则',
+  JSON.stringify(avatarRendering),
+)
 const imageRadii = await page.evaluate(() => ({
   wrapper: getComputedStyle(document.querySelector('.post-image-wrap')).borderRadius,
   image: getComputedStyle(document.querySelector('.post-image-wrap img')).borderRadius,
@@ -1387,19 +1409,21 @@ const imageFrameAt100 = await page.locator('.post-image-wrap:not(.pagination-pro
   const { width, height } = frame.getBoundingClientRect()
   return { width, height }
 })
-await page.locator('#bymark-image-scale').fill('120')
-const imageFrameAt120 = await page.locator('.post-image-wrap:not(.pagination-probe *)').evaluate((frame) => {
+const imageScaleComparisonValue = Math.min(120, Number(await page.locator('#bymark-image-scale').getAttribute('max')))
+await page.locator('#bymark-image-scale').fill(String(imageScaleComparisonValue))
+const enlargedImageFrame = await page.locator('.post-image-wrap:not(.pagination-probe *)').evaluate((frame) => {
   const { width, height } = frame.getBoundingClientRect()
   const image = frame.querySelector('img')?.getBoundingClientRect()
   return { width, height, imageWidth: image?.width, imageHeight: image?.height }
 })
 check(
-  imageFrameAt120.width > imageFrameAt100.width &&
-    imageFrameAt120.height > imageFrameAt100.height &&
-    imageFrameAt120.width === imageFrameAt120.imageWidth &&
-    imageFrameAt120.height === imageFrameAt120.imageHeight,
+  imageScaleComparisonValue > 100 &&
+    enlargedImageFrame.width > imageFrameAt100.width &&
+    enlargedImageFrame.height > imageFrameAt100.height &&
+    enlargedImageFrame.width === enlargedImageFrame.imageWidth &&
+    enlargedImageFrame.height === enlargedImageFrame.imageHeight,
   '配图缩放会连同适配原图比例的图片卡片一起调整',
-  JSON.stringify({ imageFrameAt100, imageFrameAt120 }),
+  JSON.stringify({ imageScaleComparisonValue, imageFrameAt100, enlargedImageFrame }),
 )
 const defaultImageScaleMax = Number(await page.locator('#bymark-image-scale').getAttribute('max'))
 await page.locator('#bymark-image-scale').fill(String(defaultImageScaleMax))
@@ -1696,6 +1720,34 @@ check(
   '卡片内边距可收至 0%，并同步移除四周留白',
   JSON.stringify({ sceneCardContentLayout, compactScenePadding }),
 )
+const sceneHeightControl = page.locator('#bymark-scene-card-height')
+check(
+  await sceneHeightControl.getAttribute('min') === '60' &&
+    await sceneHeightControl.getAttribute('max') === '100' &&
+    await sceneHeightControl.getAttribute('step') === '1' &&
+    await sceneHeightControl.inputValue() === '100',
+  '场景卡片高度默认 100%，可在 60% 至 100% 之间无级调节',
+)
+const fullHeightSceneCardBox = await page.locator('.post-card-scene .post-card-inner').first().boundingBox()
+await sceneHeightControl.fill('72')
+await page.waitForFunction(() =>
+  document.querySelector('[data-testid="export-card"]:not([data-pagination-probe])')?.style.getPropertyValue('--scene-card-height-scale') === '0.72',
+null, { timeout: 5000 })
+const shortenedSceneCardBox = await page.locator('.post-card-scene .post-card-inner').first().boundingBox()
+check(
+  Boolean(fullHeightSceneCardBox && shortenedSceneCardBox) &&
+    Math.abs((fullHeightSceneCardBox?.y ?? 0) - (shortenedSceneCardBox?.y ?? 0)) <= 1 &&
+    (shortenedSceneCardBox?.height ?? 0) < (fullHeightSceneCardBox?.height ?? 0) &&
+    Math.abs((fullHeightSceneCardBox?.width ?? 0) - (shortenedSceneCardBox?.width ?? 0)) <= 1 &&
+    ((shortenedSceneCardBox?.y ?? 0) + (shortenedSceneCardBox?.height ?? 0)) <
+      ((fullHeightSceneCardBox?.y ?? 0) + (fullHeightSceneCardBox?.height ?? 0)),
+  '调节卡片高度时保持顶部与宽度不变，仅移动底边',
+  JSON.stringify({ fullHeightSceneCardBox, shortenedSceneCardBox }),
+)
+await sceneHeightControl.fill('100')
+await page.waitForFunction(() =>
+  document.querySelector('[data-testid="export-card"]:not([data-pagination-probe])')?.style.getPropertyValue('--scene-card-height-scale') === '1',
+null, { timeout: 5000 })
 const sceneCardRatioButtons = page.getByRole('group', { name: '文字卡片比例' }).getByRole('button')
 check(
   (await sceneCardRatioButtons.allTextContents()).map((label) => label.trim()).join('|') === '3:4|1:1|4:3',
@@ -1949,13 +2001,16 @@ const mobileErrors = []
 mobilePage.on('pageerror', (error) => mobileErrors.push(error.message))
 await mobilePage.goto(baseURL, { waitUntil: 'networkidle' })
 await mobilePage.screenshot({ path: path.join(artifacts, 'mobile-editor.png') })
-const mobileDraftTrigger = mobilePage.getByRole('button', { name: '打开草稿抽屉' })
+const mobileDraftTrigger = mobilePage.getByRole('button', { name: '展开草稿入口' })
 check(await mobileDraftTrigger.isVisible(), '手机端左下角显示草稿抽屉入口')
 check(
   await mobilePage.locator('.draft-library').evaluate((node) => node.getBoundingClientRect().right <= 0),
   '手机端草稿默认收进左侧抽屉',
 )
 await mobileDraftTrigger.click()
+await mobilePage.waitForTimeout(340)
+check(await mobilePage.getByRole('button', { name: '打开草稿抽屉' }).isVisible(), '点击图标后草稿入口展开为完整按钮')
+await mobilePage.getByRole('button', { name: '打开草稿抽屉' }).click()
 await mobilePage.waitForTimeout(340)
 const mobileDrawerOpen = await mobilePage.evaluate(() => {
   const drawer = document.querySelector('.draft-library')?.getBoundingClientRect()
@@ -1981,6 +2036,7 @@ check(await mobilePage.getByRole('button', { name: /恢复工作区/ }).isVisibl
 check(await mobilePage.locator('.workspace-summary').isHidden(), '手机端侧栏底部不显示工作区说明')
 await mobilePage.locator('.draft-mobile-footer-close').click()
 await mobilePage.waitForTimeout(340)
+check(await mobilePage.getByRole('button', { name: '展开草稿入口' }).isVisible(), '点击抽屉外的关闭按钮后草稿胶囊收回为图标')
 check(
   await mobilePage.locator('.draft-library').evaluate((node) => node.getBoundingClientRect().right <= 0),
   '手机端草稿抽屉可由关闭按钮收回',
@@ -2014,6 +2070,7 @@ check(
   '手机端将留印与主题切换置顶，编辑和预览切换置于其下',
   JSON.stringify(mobileHeaderOrder),
 )
+check((await mobilePage.locator('.mobile-brand-lockup h1').innerText()) === '留印', '手机品牌标题不重复展示英文名')
 check(
   await mobilePage
     .locator('.preview-panel')
@@ -2111,6 +2168,7 @@ check(
   '手机端实时预览信息紧贴卡片上方',
   String(mobilePreviewHeadingGap),
 )
+await mobilePage.getByRole('button', { name: '展开草稿入口' }).click()
 await mobilePage.getByRole('button', { name: '打开草稿抽屉' }).click()
 await mobilePage.waitForTimeout(340)
 check(

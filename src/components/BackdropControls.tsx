@@ -1,6 +1,6 @@
 import { defineComponent } from "vue";
 import type { BymarkState } from "../bymark";
-import { SCENE_CARD_PADDING_MAX, SCENE_CARD_PADDING_MIN } from "../bymark";
+import { SCENE_CARD_HEIGHT_MAX, SCENE_CARD_HEIGHT_MIN, SCENE_CARD_PADDING_MAX, SCENE_CARD_PADDING_MIN } from "../bymark";
 import { SCENE_BACKDROPS } from "../sceneBackdrops";
 import { SettingsDisclosure } from "./SettingsDisclosure";
 import { UploadField } from "./UploadField";
@@ -53,7 +53,7 @@ export const BackdropControls = defineComponent(
         <SettingsDisclosure
           id={idFor("scene-details")}
           label={props.settingsLabel ?? "场景微调"}
-          summary={`${props.showCardGeometry ? `${props.state.sceneCardRatio} · 卡片 ${props.state.sceneCardScale}% · 内边距 ${props.state.sceneCardPadding}% · ` : ""}遮罩 ${props.state.sceneOverlay}%`}
+          summary={`${props.showCardGeometry ? `${props.state.sceneCardRatio} · 卡片 ${props.state.sceneCardScale}% · 高度 ${props.state.sceneCardHeight}% · 内边距 ${props.state.sceneCardPadding}% · ` : ""}遮罩 ${props.state.sceneOverlay}%`}
           class="scene-settings-disclosure"
         >
           {props.showCardGeometry && (
@@ -88,6 +88,29 @@ export const BackdropControls = defineComponent(
                   step="1"
                   value={props.state.sceneCardScale}
                   onInput={(event) => props.update("sceneCardScale", Number((event.target as HTMLInputElement).value))}
+                />
+                <span class="font-scale-large" aria-hidden="true">+</span>
+              </div>
+              <div class="range-label">
+                <label class="field-label" for={idFor("scene-card-height")}>卡片高度</label>
+                <output for={idFor("scene-card-height")}>{props.state.sceneCardHeight}%</output>
+              </div>
+              <div
+                class="font-scale-control scene-card-height-control"
+                style={{
+                  "--font-progress": `${((props.state.sceneCardHeight - SCENE_CARD_HEIGHT_MIN) / (SCENE_CARD_HEIGHT_MAX - SCENE_CARD_HEIGHT_MIN)) * 100}%`,
+                } as Record<string, string>}
+              >
+                <span aria-hidden="true">−</span>
+                <input
+                  id={idFor("scene-card-height")}
+                  type="range"
+                  min={SCENE_CARD_HEIGHT_MIN}
+                  max={SCENE_CARD_HEIGHT_MAX}
+                  step="1"
+                  value={props.state.sceneCardHeight}
+                  aria-valuetext={`${props.state.sceneCardHeight}%`}
+                  onInput={(event) => props.update("sceneCardHeight", Number((event.target as HTMLInputElement).value))}
                 />
                 <span class="font-scale-large" aria-hidden="true">+</span>
               </div>

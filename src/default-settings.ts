@@ -34,6 +34,9 @@ export const DEFAULT_IMAGE_SCALE = 126
 export const DEFAULT_SCENE_CARD_PADDING = 40
 export const SCENE_CARD_PADDING_MIN = 0
 export const SCENE_CARD_PADDING_MAX = 100
+export const DEFAULT_SCENE_CARD_HEIGHT = 100
+export const SCENE_CARD_HEIGHT_MIN = 60
+export const SCENE_CARD_HEIGHT_MAX = 100
 
 /**
  * Use the device's preferred color scheme only when no saved preference exists.
@@ -79,6 +82,7 @@ export interface BymarkState {
   sceneFocus: SceneFocus
   sceneCardRatio: SceneCardRatio
   sceneCardScale: number
+  sceneCardHeight: number
   sceneCardPadding: number
   sceneCardX: number
   sceneCardY: number
@@ -138,6 +142,7 @@ export const DEFAULT_BYMARK_SETTINGS: Readonly<BymarkState> = {
   sceneFocus: 'center',
   sceneCardRatio: '3:4',
   sceneCardScale: 100,
+  sceneCardHeight: DEFAULT_SCENE_CARD_HEIGHT,
   sceneCardPadding: DEFAULT_SCENE_CARD_PADDING,
   sceneCardX: 50,
   sceneCardY: 50,
