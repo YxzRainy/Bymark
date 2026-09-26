@@ -15,6 +15,14 @@ function check(condition, label, detail = '') {
   if (!condition) failures.push(`${label}${detail ? ` — ${detail}` : ''}`)
 }
 
+async function waitForWorkspace(page) {
+  await page.locator('.app-shell').waitFor({ state: 'visible' })
+  await page.waitForFunction(() => {
+    const button = document.querySelector('.draft-new-button')
+    return button instanceof HTMLButtonElement && !button.disabled
+  })
+}
+
 function pngChunkTypes(buffer) {
   const types = []
   let offset = 8
@@ -58,7 +66,8 @@ await page.addInitScript(() => {
   requestAnimationFrame(capture)
 })
 
-await page.goto(baseURL, { waitUntil: 'networkidle' })
+await page.goto(baseURL, { waitUntil: 'domcontentloaded' })
+await waitForWorkspace(page)
 await page.waitForTimeout(550)
 const initialLayoutFrames = await page.evaluate(() => window.__initialLayoutFrames ?? [])
 const paintedLayoutFrames = initialLayoutFrames.filter((frame) =>
@@ -156,7 +165,8 @@ const waitForInnerPadding = async (selector, expected) => {
     return [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft].join('|') === expected
   }, { selector, expected }, { timeout: 5000 })
 }
-await page.reload({ waitUntil: 'networkidle' })
+await page.reload({ waitUntil: 'domcontentloaded' })
+await waitForWorkspace(page)
 check(
   await page.locator('.app-shell').evaluate((node, theme) => node.classList.contains(`ui-${theme}`), manuallySelectedTheme),
   '手动切换后的主题优先从本地设置恢复',
@@ -1131,7 +1141,8 @@ await page.getByRole('button', { name: '使用草稿：草稿乙｜稍后再写�
 await page.waitForFunction((text) => document.querySelector('#bymark-text')?.value === text, secondDraftText)
 await bodyInput.press(process.platform === 'darwin' ? 'Meta+Z' : 'Control+Z')
 check((await bodyInput.inputValue()) === secondDraftText, '切换草稿后撤销不会污染另一份草稿')
-await page.reload({ waitUntil: 'networkidle' })
+await page.reload({ waitUntil: 'domcontentloaded' })
+await waitForWorkspace(page)
 await page.getByText('重新命名的片段', { exact: true }).waitFor({ state: 'visible' })
 check(await page.getByText('重新命名的片段', { exact: true }).isVisible(), '刷新后仍可读取本地草稿')
 await page.getByRole('button', { name: '删除草稿：草稿乙｜稍后再写。', exact: true }).click()
@@ -1313,7 +1324,10 @@ for (const preset of [
     await page.screenshot({ path: path.join(artifacts, 'desktop-9-16.png') })
     const verticalDownloadPromise = page.waitForEvent('download')
     await page.locator('.export-button').click()
-    const verticalDownload = await verticalDownloadPromise
+    const verticalDownload = await verticalDownloadPromise.catch(async (error) => {
+      console.error('9:16 export notice:', await page.locator('.toast').allTextContents(), 'console:', consoleErrors)
+      throw error
+    })
     await verticalDownload.saveAs(path.join(artifacts, 'export-9-16.png'))
     check((await verticalDownload.failure()) === null, '9:16 PNG 下载成功')
     await page.waitForTimeout(120)
@@ -1481,7 +1495,8 @@ check(
 await page.screenshot({ path: path.join(artifacts, 'desktop-with-image.png') })
 await page.getByRole('button', { name: '删除配图' }).click()
 check((await page.locator('.post-image-wrap:not(.pagination-probe *)').count()) === 0, '正文配图删除后区域完全消失')
-await page.reload({ waitUntil: 'networkidle' })
+await page.reload({ waitUntil: 'domcontentloaded' })
+await waitForWorkspace(page)
 await page.getByRole('tab', { name: '导出' }).click()
 await page.locator('.post-avatar img:not(.pagination-probe *)').waitFor({ state: 'visible' })
 check((await page.locator('.post-avatar img:not(.pagination-probe *)').count()) === 1, '刷新后恢复本地记忆头像')
@@ -1490,7 +1505,8 @@ check(
   (await page.locator('.post-avatar img:not(.pagination-probe *)').getAttribute('src')) === '/default-avatar.png',
   '头像删除后恢复项目内置头像',
 )
-await page.reload({ waitUntil: 'networkidle' })
+await page.reload({ waitUntil: 'domcontentloaded' })
+await waitForWorkspace(page)
 await page.waitForTimeout(80)
 check(
   (await page.locator('.post-avatar img:not(.pagination-probe *)').getAttribute('src')) === '/default-avatar.png',
@@ -1893,7 +1909,8 @@ check(
 )
 await page.getByRole('button', { name: '4K', exact: true }).click()
 
-await page.reload({ waitUntil: 'networkidle' })
+await page.reload({ waitUntil: 'domcontentloaded' })
+await waitForWorkspace(page)
 await page.getByRole('tab', { name: '导出' }).click()
 check((await page.locator('.export-settings-button strong').textContent()) === '4K JPG', 'localStorage 恢复 JPG 导出格式与分辨率')
 check((await page.getByLabel('昵称').inputValue()) === '留印测试者', 'localStorage 恢复昵称')
@@ -1928,7 +1945,8 @@ await page.getByLabel('预设名称').fill('我的抖音版式')
 await page.getByRole('button', { name: '保存预设', exact: true }).click()
 await page.getByText('我的抖音版式', { exact: true }).waitFor({ state: 'visible' })
 check(await page.getByText('我的抖音版式', { exact: true }).isVisible(), '可自定义名称保存当前设置预设')
-await page.reload({ waitUntil: 'networkidle' })
+await page.reload({ waitUntil: 'domcontentloaded' })
+await waitForWorkspace(page)
 await page.getByRole('tab', { name: '版式' }).click()
 await page.getByText('我的抖音版式', { exact: true }).waitFor({ state: 'visible' })
 check(await page.getByText('我的抖音版式', { exact: true }).isVisible(), '命名预设会持久保存到本地')
@@ -1999,7 +2017,8 @@ const mobile = await browser.newContext({
 const mobilePage = await mobile.newPage()
 const mobileErrors = []
 mobilePage.on('pageerror', (error) => mobileErrors.push(error.message))
-await mobilePage.goto(baseURL, { waitUntil: 'networkidle' })
+await mobilePage.goto(baseURL, { waitUntil: 'domcontentloaded' })
+await waitForWorkspace(mobilePage)
 await mobilePage.screenshot({ path: path.join(artifacts, 'mobile-editor.png') })
 const mobileDraftTrigger = mobilePage.getByRole('button', { name: '展开草稿入口' })
 check(await mobileDraftTrigger.isVisible(), '手机端左下角显示草稿抽屉入口')
@@ -2245,7 +2264,8 @@ await migration.addInitScript(() => {
   )
 })
 const migrationPage = await migration.newPage()
-await migrationPage.goto(baseURL, { waitUntil: 'networkidle' })
+await migrationPage.goto(baseURL, { waitUntil: 'domcontentloaded' })
+await waitForWorkspace(migrationPage)
 await migrationPage.waitForFunction(() => Boolean(localStorage.getItem('bymark-settings-v1')))
 await migrationPage.getByRole('tab', { name: '导出' }).click()
 check((await migrationPage.getByLabel('昵称').inputValue()) === '旧版本作者', '旧版本地设置可自动迁移')
@@ -2268,7 +2288,8 @@ await avatarFallback.addInitScript(() => {
   localStorage.setItem('bymark-avatar-v1', 'data:image/png;base64,avatar-fallback-test')
 })
 const avatarFallbackPage = await avatarFallback.newPage()
-await avatarFallbackPage.goto(baseURL, { waitUntil: 'networkidle' })
+await avatarFallbackPage.goto(baseURL, { waitUntil: 'domcontentloaded' })
+await waitForWorkspace(avatarFallbackPage)
 check(
   (await avatarFallbackPage.locator('.post-avatar img:not(.pagination-probe *)').getAttribute('src')) === 'data:image/png;base64,avatar-fallback-test',
   '禁用 IndexedDB 后刷新仍能从统一 fallback key 恢复头像',

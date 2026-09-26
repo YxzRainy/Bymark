@@ -6,6 +6,7 @@ import path from 'node:path'
 const configuredUrl = process.env.BYMARK_URL
 let targetUrl = configuredUrl || 'http://127.0.0.1:5174'
 let localServer
+let stoppingLocalServer = false
 
 async function hasServer(url) {
   try {
@@ -34,14 +35,20 @@ function findAvailablePort() {
 
 async function startLocalServer(port) {
   localServer = spawn(
-    path.resolve('node_modules/.bin/vite'),
-    ['--host', '127.0.0.1', '--port', String(port), '--strictPort'],
-    { stdio: ['ignore', 'ignore', 'pipe'] },
+    process.execPath,
+    [path.resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
+    { stdio: ['pipe', 'pipe', 'pipe'] },
   )
 
   let startupError = ''
+  localServer.stdout.on('data', (chunk) => {
+    startupError += chunk.toString()
+  })
   localServer.stderr.on('data', (chunk) => {
     startupError += chunk.toString()
+  })
+  localServer.on('exit', (code, signal) => {
+    if (!stoppingLocalServer) console.error(`QA 服务意外退出 (${code ?? signal})：${startupError}`)
   })
 
   for (let attempt = 0; attempt < 50; attempt += 1) {
@@ -73,6 +80,7 @@ try {
   else process.exitCode = code ?? 1
 } finally {
   if (localServer && localServer.exitCode === null) {
+    stoppingLocalServer = true
     localServer.kill('SIGTERM')
   }
 }
