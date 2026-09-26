@@ -23,6 +23,21 @@ async function waitForWorkspace(page) {
   })
 }
 
+async function configureQaNetwork(context) {
+  // The general UI suite exercises browser-local migration; shared storage
+  // has a separate browser suite and must not merge state across contexts.
+  await context.route('**/__bymark_shared_storage*', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  )
+  await context.route('https://api.github.com/repos/YxzRainy/Bymark/releases/latest', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ tag_name: 'v0.1.0', html_url: 'https://github.com/YxzRainy/Bymark/releases' }),
+    }),
+  )
+}
+
 function pngChunkTypes(buffer) {
   const types = []
   let offset = 8
@@ -42,6 +57,7 @@ const desktop = await browser.newContext({
   acceptDownloads: true,
   permissions: ['clipboard-read', 'clipboard-write'],
 })
+await configureQaNetwork(desktop)
 const page = await desktop.newPage()
 const consoleErrors = []
 page.on('console', (message) => {
@@ -2014,6 +2030,7 @@ const mobile = await browser.newContext({
   isMobile: true,
   hasTouch: true,
 })
+await configureQaNetwork(mobile)
 const mobilePage = await mobile.newPage()
 const mobileErrors = []
 mobilePage.on('pageerror', (error) => mobileErrors.push(error.message))
@@ -2252,6 +2269,7 @@ check(
 )
 
 const migration = await browser.newContext({ viewport: { width: 1200, height: 900 } })
+await configureQaNetwork(migration)
 await migration.addInitScript(() => {
   localStorage.setItem(
     'postmark-state-v1',
@@ -2283,6 +2301,7 @@ check(
 )
 
 const avatarFallback = await browser.newContext({ viewport: { width: 900, height: 700 } })
+await configureQaNetwork(avatarFallback)
 await avatarFallback.addInitScript(() => {
   Object.defineProperty(window, 'indexedDB', { configurable: true, value: undefined })
   localStorage.setItem('bymark-avatar-v1', 'data:image/png;base64,avatar-fallback-test')
