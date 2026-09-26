@@ -1530,7 +1530,9 @@ check(
 )
 await page.reload({ waitUntil: 'domcontentloaded' })
 await waitForWorkspace(page)
-await page.waitForTimeout(80)
+await page.waitForFunction(() =>
+  document.querySelector('.post-avatar img:not(.pagination-probe *)')?.getAttribute('src') === '/default-avatar.png',
+)
 check(
   (await page.locator('.post-avatar img:not(.pagination-probe *)').getAttribute('src')) === '/default-avatar.png',
   '恢复默认头像后刷新保持项目内置头像',
@@ -1588,10 +1590,13 @@ check(
   JSON.stringify(footerFit),
 )
 const numericFirstPage = await page.locator('.post-copy:not(.pagination-probe *)').textContent()
+const numericLineHeight = await page.locator('.post-copy:not(.pagination-probe *)').evaluate((node) =>
+  Number.parseFloat(getComputedStyle(node).lineHeight),
+)
 check(
-  numericFirstPage.endsWith('461,'),
-  '连续数字分页以真实卡片高度为准，不会在 461 后提前留出整行空白',
-  numericFirstPage.slice(-32),
+  numericFirstPage.endsWith(',') && footerFit.gap !== null && footerFit.gap < numericLineHeight,
+  '连续数字分页以真实卡片高度为准，不会提前留出整行空白',
+  JSON.stringify({ ending: numericFirstPage.slice(-32), gap: footerFit.gap, numericLineHeight }),
 )
 await page.getByRole('tab', { name: '查看第 2 页', exact: true }).click()
 await page.waitForFunction(() => document.querySelector('.post-page-number:not(.pagination-probe *)')?.textContent?.startsWith('02 /'), null, { timeout: 5000 })
