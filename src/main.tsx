@@ -17,7 +17,9 @@ function localJson(key: string) {
 }
 
 async function mountApp() {
-  if (await hasSharedStorage()) {
+  // Keep the browser fallback when IndexedDB is unavailable. In that state we
+  // cannot safely inspect legacy drafts, so shared migration must wait.
+  if (typeof indexedDB !== 'undefined' && await hasSharedStorage()) {
     let local: SharedSnapshot = {
       settings: null, exportPreferences: null, drafts: [], archives: [],
       brandTemplates: [], avatar: null, image: null, sceneImage: null,
