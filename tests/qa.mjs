@@ -1528,6 +1528,24 @@ check(
   (await page.locator('.post-avatar img:not(.pagination-probe *)').getAttribute('src')) === '/default-avatar.png',
   '头像删除后恢复项目内置头像',
 )
+// The UI updates before its queued IndexedDB write completes. Reload only
+// after the value that loadAvatar reads is durable.
+await page.waitForFunction(async () => {
+  const database = await new Promise((resolve, reject) => {
+    const request = indexedDB.open('bymark-local-assets', 1)
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error)
+  })
+  try {
+    return await new Promise((resolve, reject) => {
+      const request = database.transaction('assets', 'readonly').objectStore('assets').get('bymark-avatar-v1')
+      request.onsuccess = () => resolve(request.result === '/default-avatar.png')
+      request.onerror = () => reject(request.error)
+    })
+  } finally {
+    database.close()
+  }
+})
 await page.reload({ waitUntil: 'domcontentloaded' })
 await waitForWorkspace(page)
 await page.waitForFunction(() =>
