@@ -1,22 +1,33 @@
-import { ImagePlus, Trash2, Upload } from "lucide-vue-next";
-import { defineComponent, ref } from "vue";
+import { Crop, ImagePlus, Trash2, Upload } from "lucide-vue-next";
+import { defineComponent, ref, shallowRef, Teleport } from "vue";
+import { ImageCropDialog } from './ImageCropDialog';
 
 export const UploadField = defineComponent((props: {
   value: string | null;
   kind: "avatar" | "image" | "scene";
-  onFile: (file: File) => void;
+  onFile: (file: File) => void | Promise<void>;
   onRemove: () => void;
 }) => {
   const inputRef = ref<HTMLInputElement | null>(null);
+  const cropSource = ref<string | null>(null);
   const id = `bymark-upload-${props.kind}`;
   const isAvatar = props.kind === "avatar";
   const isScene = props.kind === "scene";
   const label = isAvatar ? "头像" : isScene ? "场景背景" : "配图";
   const supportedImageTypes = ["image/jpeg", "image/png", "image/webp"];
   const isDragging = ref(false);
+  const uploading = shallowRef(false);
   const chooseFile = () => inputRef.value?.click();
-  const useFile = (file: File | undefined) => {
-    if (file && supportedImageTypes.includes(file.type)) props.onFile(file);
+  const useFile = async (file: File | undefined) => {
+    if (!file || uploading.value || !supportedImageTypes.includes(file.type)) return;
+    uploading.value = true;
+    try {
+      await props.onFile(file);
+    } catch {
+      // The parent reports decoding or persistence errors through its notice.
+    } finally {
+      uploading.value = false;
+    }
   };
   const receiveFile = (event: Event) => {
     const input = event.target as HTMLInputElement;
@@ -40,13 +51,14 @@ export const UploadField = defineComponent((props: {
   };
 
   return () => (
-    <div class="upload-row">
+    <div class="upload-row" aria-busy={uploading.value}>
       <input
         id={id}
         ref={inputRef}
         type="file"
         accept="image/jpeg,image/png,image/webp"
         class="sr-only"
+        disabled={uploading.value}
         aria-label={isAvatar ? "选择头像图片" : isScene ? "选择场景背景图片" : "选择内容配图"}
         onChange={receiveFile}
       />
@@ -54,6 +66,7 @@ export const UploadField = defineComponent((props: {
         type="button"
         class={["upload-preview", isAvatar && "avatar-preview", isDragging.value && "upload-preview-drop-active"]}
         onClick={chooseFile}
+        disabled={uploading.value}
         onDragenter={startDrag}
         onDragover={startDrag}
         onDragleave={endDrag}
@@ -71,9 +84,11 @@ export const UploadField = defineComponent((props: {
       </button>
       {props.value && (
         <div class="upload-actions">
+          {props.kind === 'image' && <button type="button" class="icon-button" disabled={uploading.value} aria-label="自由裁剪配图" title="自由裁剪" onClick={(event) => { (event.currentTarget as HTMLButtonElement).focus({ preventScroll: true }); cropSource.value = props.value; }}><Crop size={15} /></button>}
           <button
             type="button"
             class="icon-button"
+            disabled={uploading.value}
             onClick={props.onRemove}
             aria-label={isAvatar ? "恢复默认头像" : `删除${label}`}
           >
@@ -81,6 +96,7 @@ export const UploadField = defineComponent((props: {
           </button>
         </div>
       )}
+      {cropSource.value && <Teleport to="body"><ImageCropDialog source={cropSource.value} onClose={() => { cropSource.value = null; }} onApply={props.onFile} /></Teleport>}
     </div>
   );
 }, {

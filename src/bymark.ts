@@ -11,7 +11,6 @@ import {
   type SceneFocus,
   type SceneCardRatio,
   type SceneBackdropPreset,
-  type SocialMetricScale,
   DEFAULT_SCENE_CARD_PADDING,
   SCENE_CARD_PADDING_MIN,
   SCENE_CARD_PADDING_MAX,
@@ -21,10 +20,11 @@ import {
   resolveDeviceTheme,
 } from './default-settings'
 import { normalizeSceneBackdrop } from './sceneBackdrops.ts'
+import { normalizeSocialMetricScale } from './socialMetrics.ts'
 import { filenameBaseFor, normalizeWorkTitle } from './title'
 import { isSharedStorageEnabled, loadSharedValue, saveSharedValue, sharedInitialValue } from './sharedStorage.ts'
 
-export type { AspectRatio, BymarkState, ExportMode, ImageAlignment, ImagePosition, Theme, VisualStyle, CanvasStyle, SceneFocus, SceneCardRatio, SceneBackdropPreset, SocialMetricScale } from './default-settings'
+export type { AspectRatio, BymarkState, ExportMode, ImageAlignment, ImagePosition, Theme, VisualStyle, CanvasStyle, SceneFocus, SceneCardRatio, SceneBackdropPreset, SocialMetricScale, SocialMetricProfile } from './default-settings'
 export { DEFAULT_AVATAR, DEFAULT_BYMARK_SETTINGS, DEFAULT_EXPORT_SETTINGS, DEFAULT_IMAGE_SCALE, DEFAULT_SCENE_CARD_PADDING, SCENE_CARD_PADDING_MIN, SCENE_CARD_PADDING_MAX, DEFAULT_SCENE_CARD_HEIGHT, SCENE_CARD_HEIGHT_MIN, SCENE_CARD_HEIGHT_MAX } from './default-settings'
 export { normalizeWorkTitle, resolvedTitleFor, textTitleFor, WORK_TITLE_MAX_LENGTH, FILENAME_TITLE_MAX_LENGTH } from './title'
 
@@ -184,10 +184,7 @@ export function normalizeState(parsed: Partial<BymarkState> & LegacyPublishDetai
     ? parsed.socialLikes.slice(0, 8)
     : typeof parsed.likes === 'string' ? parsed.likes.slice(0, 8) : defaults.socialLikes
   const socialViews = typeof parsed.socialViews === 'string' ? parsed.socialViews.slice(0, 8) : defaults.socialViews
-  const socialMetricScale: SocialMetricScale =
-    parsed.socialMetricScale === 'subtle' || parsed.socialMetricScale === 'popular'
-      ? parsed.socialMetricScale
-      : 'daily'
+  const socialMetricScale = normalizeSocialMetricScale(parsed.socialMetricScale)
   delete state.showSeries
   delete state.series
   delete state.showEngagement
@@ -300,15 +297,17 @@ function writeAvatarToDatabase(avatar: string | null, name = AVATAR_DB_NAME, key
   return openAvatarDatabase(name).then(
     (database) =>
       new Promise<void>((resolve, reject) => {
-        const store = database.transaction(AVATAR_STORE_NAME, 'readwrite').objectStore(AVATAR_STORE_NAME)
-        const request = avatar ? store.put(avatar, key) : store.delete(key)
-        request.onsuccess = () => {
+        const transaction = database.transaction(AVATAR_STORE_NAME, 'readwrite')
+        const store = transaction.objectStore(AVATAR_STORE_NAME)
+        if (avatar) store.put(avatar, key)
+        else store.delete(key)
+        transaction.oncomplete = () => {
           database.close()
           resolve()
         }
-        request.onerror = () => {
+        transaction.onabort = transaction.onerror = () => {
           database.close()
-          reject(request.error ?? new Error('Unable to save avatar storage'))
+          reject(transaction.error ?? new Error('Unable to save avatar storage'))
         }
       }),
   )
@@ -365,11 +364,7 @@ export async function saveImageAsset(key: string, value: string | null) {
     await saveSharedValue(key === SCENE_IMAGE_ASSET_KEY ? 'sceneImage' : 'image', value)
     return
   }
-  try {
-    await writeAvatarToDatabase(value, AVATAR_DB_NAME, key)
-  } catch {
-    // IndexedDB 不可用时无法持久化，仅保留当前会话内的显示。
-  }
+  await writeAvatarToDatabase(value, AVATAR_DB_NAME, key)
 }
 
 export function formatTime(time: string) {

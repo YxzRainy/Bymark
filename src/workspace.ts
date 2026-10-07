@@ -3,6 +3,7 @@ import type { Draft } from "./drafts";
 import type { Archive } from "./archives";
 import type { BymarkState } from "./bymark";
 import { normalizeSceneBackdrop } from "./sceneBackdrops.ts";
+import { normalizeSocialMetricScale } from './socialMetrics.ts';
 
 export const WORKSPACE_FORMAT = "bymark-workspace" as const;
 export const WORKSPACE_VERSION = 2 as const;
@@ -63,6 +64,7 @@ export function parseWorkspaceExport(value: unknown): WorkspaceExport {
       socialReposts: typeof data.state.socialReposts === "string" ? data.state.socialReposts.slice(0, 8) : "",
       socialLikes: typeof data.state.socialLikes === "string" ? data.state.socialLikes.slice(0, 8) : "5",
       socialViews: typeof data.state.socialViews === "string" ? data.state.socialViews.slice(0, 8) : "307",
+      socialMetricScale: normalizeSocialMetricScale(data.state.socialMetricScale),
     },
     avatar: typeof data.avatar === "string" ? data.avatar : null,
     image: typeof data.image === "string" ? data.image : null,

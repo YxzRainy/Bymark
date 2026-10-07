@@ -1,6 +1,35 @@
 export const IMAGE_SCALE_MIN = 80;
 export const IMAGE_SCALE_MAX = 160;
 
+export function sceneImageLayoutFor(options: {
+  contentWidth: number;
+  imageAspectRatio: number;
+  imageScale: number;
+  minimumCardHeight: number;
+  maximumCardHeight: number;
+  reservedHeight: number;
+}) {
+  const { contentWidth, imageAspectRatio, imageScale, minimumCardHeight, maximumCardHeight, reservedHeight } = options;
+  // Floating social posts grow around the photo. Basing its size on the
+  // original, short text area made the entire slider collapse to 80%.
+  const heightAt100 = contentWidth / imageAspectRatio / (IMAGE_SCALE_MAX / 100);
+  const maximumImageHeight = Math.max(0, Math.min(
+    contentWidth / imageAspectRatio,
+    maximumCardHeight - reservedHeight,
+  ));
+  const scaleLimit = Math.min(IMAGE_SCALE_MAX, Math.max(
+    IMAGE_SCALE_MIN,
+    Math.floor(maximumImageHeight / heightAt100 * 100),
+  ));
+  const height = Math.min(maximumImageHeight, heightAt100 * imageScale / 100);
+  return {
+    width: height * imageAspectRatio,
+    height,
+    cardHeight: Math.max(minimumCardHeight, reservedHeight + height),
+    scaleLimit,
+  };
+}
+
 export function imageScaleLimitForFrame(options: {
   contentWidth: number;
   contentHeight: number;

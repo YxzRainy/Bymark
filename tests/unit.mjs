@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import './social-metrics.mjs'
 import { brandProfileFor } from '../src/brandTemplates.ts'
 import { filenameBaseFor, normalizeWorkTitle, resolvedTitleFor } from '../src/title.ts'
 import { createNextIssueState } from '../src/nextIssue.ts'
@@ -114,6 +115,8 @@ assert.equal(profile.sceneBackdrop, 'lagoon')
 assert.equal(profile.sceneCardHeight, 78)
 assert.equal(profile.sceneCardPadding, 64)
 assert.equal(profile.socialMetricScale, 'daily')
+assert.equal(brandProfileFor({ ...state, socialMetricScale: 'viral' }).socialMetricScale, 'viral')
+assert.equal(brandProfileFor({ ...state, socialMetricScale: 'rising' }).socialMetricScale, 'rising')
 assert.equal(resolvedTitleFor(state), '作品标题')
 assert.equal(filenameBaseFor(state.title, state.date), 'bymark-作品标题-2026-01-01')
 assert.equal(filenameBaseFor(' 一次关于“内容 / 商业”的思考？ ', state.date), 'bymark-一次关于内容-商业的思考-2026-01-01')
@@ -126,6 +129,9 @@ assert.equal(parseWorkspaceExport(payload).version, WORKSPACE_VERSION)
 assert.deepEqual(parseWorkspaceExport({ ...payload, version: 1, archives: undefined }).archives, [])
 assert.equal(parseWorkspaceExport({ ...payload, state: { ...state, visualStyle: undefined } }).state.visualStyle, 'default')
 assert.equal(parseWorkspaceExport({ ...payload, state: { ...state, sceneBackdrop: undefined } }).state.sceneBackdrop, 'lagoon')
+assert.equal(parseWorkspaceExport({ ...payload, state: { ...state, socialMetricScale: 'viral' } }).state.socialMetricScale, 'viral')
+assert.equal(parseWorkspaceExport({ ...payload, state: { ...state, socialMetricScale: 'rising' } }).state.socialMetricScale, 'rising')
+assert.equal(parseWorkspaceExport({ ...payload, state: { ...state, socialMetricScale: undefined } }).state.socialMetricScale, 'daily')
 assert.deepEqual(mergeById([{ id: 'draft-1', value: 'old' }], [{ id: 'draft-1', value: 'new' }, { id: 'draft-2' }]), [
   { id: 'draft-1', value: 'new' },
   { id: 'draft-2' },

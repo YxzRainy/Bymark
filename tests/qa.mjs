@@ -324,6 +324,24 @@ check(
   await page.locator('.social-metrics-scale-picker button.active').evaluate((node) => node.textContent === '克制'),
   '可切换为克制随机规模',
 )
+check(await page.locator('.social-metrics-scale-picker button').count() === 5, '随机数据提供五个曝光档位')
+check(await page.locator('.social-metrics-editor select').count() === 0, '互动数据不再显示内容类型选择')
+for (const [label, min, max] of [['克制', 200, 999], ['日常', 1_000, 4_999], ['起量', 5_000, 19_999], ['热门', 20_000, 99_999], ['出圈', 100_000, 1_500_000]]) {
+  await page.getByRole('button', { name: label, exact: true }).click()
+  const metrics = await page.locator('.social-metrics-grid input').evaluateAll((inputs) => inputs.map((input) => {
+    const value = input.value
+    return Number.parseFloat(value) * (value.endsWith('M') ? 1_000_000 : value.endsWith('K') ? 1_000 : 1)
+  }))
+  const [replies, reposts, likes, views] = metrics
+  check(views >= min && views <= max && likes > replies && likes > reposts && likes <= views * 0.04 + 1 && replies <= views * 0.003 + 1 && reposts <= views * 0.0015 + 1, `选择${label}档后自动生成普通水平的互动数据`, metrics.join(' / '))
+}
+await socialMetricsRandomizer.click()
+check(await socialMetricsRandomizer.getAttribute('title') === '按出圈规模随机生成四项互动数据', '随机按钮跟随当前曝光档位')
+await page.waitForFunction(() => {
+  const saved = JSON.parse(localStorage.getItem('bymark-settings-v1') || '{}').state
+  return saved?.socialMetricScale === 'viral'
+})
+await page.locator('.social-metrics-disclosure').screenshot({ path: path.join(artifacts, 'social-metrics-controls.png') })
 await page.getByRole('tab', { name: '版式' }).click()
 await page.getByRole('button', { name: /^场景微调/ }).click()
 const folioPaddingControl = page.locator('#bymark-scene-card-padding')
@@ -1399,8 +1417,8 @@ check(
 )
 check(
   imageRadii.wrapperBorderWidth === '0px' &&
-    imageRadii.wrapperShadow === 'rgba(99, 99, 99, 0.2) 0px 2px 8px 0px',
-  '正文配图移除边框并使用指定阴影',
+    imageRadii.wrapperShadow === 'none',
+  '正文配图无边框、无阴影',
   JSON.stringify(imageRadii),
 )
 check(
@@ -1428,10 +1446,10 @@ check(
   '插入配图后，默认尺寸与头像左侧对齐',
 )
 await page.locator('#bymark-image-scale').fill('100')
-await page.getByRole('button', { name: '图片放大 10%' }).click()
-check((await page.locator('#bymark-image-scale').inputValue()) === '110', '配图缩放支持快捷放大 10%')
-await page.getByRole('button', { name: '图片缩小 10%' }).click()
-check((await page.locator('#bymark-image-scale').inputValue()) === '100', '配图缩放支持快捷缩小 10%')
+await page.getByRole('button', { name: '图片放大 1%' }).click()
+check((await page.locator('#bymark-image-scale').inputValue()) === '101', '配图缩放每次放大 1%')
+await page.getByRole('button', { name: '图片缩小 1%' }).click()
+check((await page.locator('#bymark-image-scale').inputValue()) === '100', '配图缩放每次缩小 1%')
 const imageScaleLayout = await page.locator('.image-scale-control').evaluate((control) => {
   const controlRect = control.getBoundingClientRect()
   const rangeRect = control.querySelector('input')?.getBoundingClientRect()
@@ -1765,6 +1783,29 @@ check(
 )
 await page.getByRole('button', { name: /^场景微调/ }).click()
 const scenePaddingControl = page.locator('#bymark-scene-card-padding')
+for (const [selector, label] of [['.scene-card-scale-control', '卡片大小'], ['.scene-card-height-control', '卡片高度'], ['.scene-card-padding-control', '卡片内边距'], ['.scene-overlay-control', '背景遮罩']]) {
+  const control = page.locator(selector)
+  const slider = control.getByRole('slider')
+  const buttons = control.getByRole('button')
+  const original = await slider.inputValue()
+  const minimum = Number(await slider.getAttribute('min'))
+  const maximum = Number(await slider.getAttribute('max'))
+  const middle = Math.floor((minimum + maximum) / 2)
+  await slider.fill(String(middle))
+  await buttons.first().click()
+  check(await slider.inputValue() === String(middle - 1), `${label}减号每次减少 1%`)
+  await buttons.last().click()
+  check(await slider.inputValue() === String(middle), `${label}加号每次增加 1%`)
+  await slider.fill(String(minimum))
+  check(await buttons.first().isDisabled(), `${label}达到最小值时禁用减号`)
+  await buttons.last().click()
+  check(await slider.inputValue() === String(minimum + 1), `${label}可从最小值增加 1%`)
+  await slider.fill(String(maximum))
+  check(await buttons.last().isDisabled(), `${label}达到最大值时禁用加号`)
+  await buttons.first().click()
+  check(await slider.inputValue() === String(maximum - 1), `${label}可从最大值减少 1%`)
+  await slider.fill(original)
+}
 check(
   await scenePaddingControl.getAttribute('min') === '0' &&
     await scenePaddingControl.getAttribute('max') === '100' &&

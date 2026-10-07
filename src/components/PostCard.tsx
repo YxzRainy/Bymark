@@ -25,9 +25,13 @@ import {
   RATIO_HEIGHTS,
   signatureFor,
 } from "../bymark";
-import { imageScaleLimitForFrame } from "../imageScale";
+import { imageScaleLimitForFrame, sceneImageLayoutFor } from "../imageScale";
 import { MarkdownContent } from "../markdown";
 import { sceneBackdropFor } from "../sceneBackdrops";
+
+function hasSocialMetric(value: string) {
+  return value.trim() !== "" && Number(value) !== 0;
+}
 
 function imageHeightBasisFor(state: BymarkState) {
   if (state.visualStyle === "folio" && state.canvasStyle === "scene" && state.sceneCardRatio === "4:3") {
@@ -84,6 +88,7 @@ export const PostCard = defineComponent(
     const signatureRef = ref<HTMLDivElement | null>(null);
     const imageAspectRatio = shallowRef<number | null>(null);
     const imageFrameMaxHeight = shallowRef<number | null>(null);
+    const sceneImageLayout = shallowRef<ReturnType<typeof sceneImageLayoutFor> | null>(null);
     const signatureScale = ref(1);
     const signatureText = computed(() =>
       signatureFor(props.state.signature, props.state.userId),
@@ -121,8 +126,10 @@ export const PostCard = defineComponent(
       y: number;
     } | null = null;
     let sceneDragFrame: number | undefined;
+    let imageMeasureFrame: number | undefined;
     let reportedImageScaleLimit: number | undefined;
     const usesBackdrop = () => props.state.canvasStyle === "scene";
+    const usesAdaptiveSceneImage = () => props.state.visualStyle === "folio" && usesBackdrop() && Boolean(props.image);
     const paintSceneDrag = () => {
       sceneDragFrame = undefined;
       if (!sceneDrag) return;
@@ -203,6 +210,43 @@ export const PostCard = defineComponent(
       const content = contentRef.value;
       const aspectRatio = imageAspectRatio.value;
       if (!props.image || !content || !aspectRatio) return;
+      if (usesAdaptiveSceneImage() && rootRef.value) {
+        const inner = content.parentElement!;
+        const cardBaseHeight = sceneCardBaseHeight(props.state.sceneCardRatio);
+        const minimumCardHeight = cardBaseHeight * props.state.sceneCardHeight / 100;
+        const scale = props.state.sceneCardScale / 100;
+        const canvasHeight = rootRef.value.clientHeight;
+        // Keep the configured card's centre while growing, and reserve enough
+        // canvas space above and below it for the complete enlarged card.
+        const centreY = canvasHeight * props.state.sceneCardY / 100
+          + (minimumCardHeight - cardBaseHeight) * scale / 2;
+        const maximumCardHeight = Math.max(minimumCardHeight,
+          2 * Math.min(centreY, canvasHeight - centreY) / scale,
+        );
+        const chromeHeight = inner.offsetHeight - content.clientHeight;
+        const copyHeight = Math.min(copyRef.value?.scrollHeight ?? 0,
+          Math.max(0, minimumCardHeight - chromeHeight - 15),
+        );
+        const layout = sceneImageLayoutFor({
+          contentWidth: content.clientWidth,
+          imageAspectRatio: aspectRatio,
+          imageScale: props.state.imageScale,
+          minimumCardHeight,
+          maximumCardHeight,
+          reservedHeight: chromeHeight + copyHeight + 15,
+        });
+        const previous = sceneImageLayout.value;
+        if (!previous || Math.abs(previous.height - layout.height) > 0.5
+          || Math.abs(previous.width - layout.width) > 0.5
+          || Math.abs(previous.cardHeight - layout.cardHeight) > 0.5) {
+          sceneImageLayout.value = layout;
+        }
+        if (layout.scaleLimit !== reportedImageScaleLimit) {
+          reportedImageScaleLimit = layout.scaleLimit;
+          props.onImageScaleLimitChange(layout.scaleLimit);
+        }
+        return;
+      }
       const heightBasis = imageHeightBasisFor(props.state);
       const nextFrameMaxHeight = content.clientWidth / aspectRatio;
       if (
@@ -251,7 +295,15 @@ export const PostCard = defineComponent(
       props.cardRef(rootRef.value);
       observer = new ResizeObserver(() => {
         measure();
-        measureImageScaleLimit();
+        // Enlarging the photo also resizes this observed content region.
+        // Measure on the next frame instead of resizing it again inside the
+        // observer delivery cycle (which triggers a loop warning in WebKit).
+        if (imageMeasureFrame === undefined) {
+          imageMeasureFrame = requestAnimationFrame(() => {
+            imageMeasureFrame = undefined;
+            measureImageScaleLimit();
+          });
+        }
       });
       if (copyRef.value) observer.observe(copyRef.value);
       if (contentRef.value) observer.observe(contentRef.value);
@@ -266,6 +318,7 @@ export const PostCard = defineComponent(
       observer?.disconnect();
       signatureObserver?.disconnect();
       if (sceneDragFrame !== undefined) cancelAnimationFrame(sceneDragFrame);
+      if (imageMeasureFrame !== undefined) cancelAnimationFrame(imageMeasureFrame);
       props.cardRef(null);
     });
     watch(
@@ -274,6 +327,8 @@ export const PostCard = defineComponent(
         props.state.fontScale,
         props.state.lineHeightScale,
         props.state.sceneCardHeight,
+        props.state.sceneCardScale,
+        props.state.sceneCardY,
         props.state.sceneCardPadding,
         props.state.sceneCardRatio,
         props.state.canvasStyle,
@@ -286,6 +341,7 @@ export const PostCard = defineComponent(
         props.state.showDate,
         props.state.showLocation,
         props.state.imagePosition,
+        props.state.imageScale,
       ],
       () => nextTick(() => {
         measure();
@@ -294,6 +350,15 @@ export const PostCard = defineComponent(
       }),
       { flush: "post" },
     );
+    watch(() => props.image, () => {
+      // A replacement must be measured with its own natural dimensions;
+      // the previous photo's limit must not clamp the new saved scale.
+      imageAspectRatio.value = null;
+      imageFrameMaxHeight.value = null;
+      sceneImageLayout.value = null;
+      reportedImageScaleLimit = undefined;
+      nextTick(() => syncImageAspectRatio(imageRef.value));
+    });
 
     return () => {
       const displayName =
@@ -310,6 +375,9 @@ export const PostCard = defineComponent(
       const [scenePaddingTop, scenePaddingRight, scenePaddingBottom, scenePaddingLeft] = sceneCardPaddingBase(props.state, isFolio);
       const imageHeightBasis = imageHeightBasisFor(props.state);
       const imageHeight = imageHeightBasis * (props.state.imageScale / 100);
+      const adaptiveImage = usesAdaptiveSceneImage() ? sceneImageLayout.value : null;
+      const minimumSceneCardHeight = sceneCardBaseHeightValue * sceneCardHeightScale;
+      const sceneCardHeight = adaptiveImage?.cardHeight ?? minimumSceneCardHeight;
       const contentImage = props.image && (
         <div
           class={[
@@ -317,7 +385,12 @@ export const PostCard = defineComponent(
             `post-image-${props.state.imagePosition}`,
             `post-image-align-${props.state.imageAlignment}`,
           ]}
-          style={{
+          style={adaptiveImage ? {
+            width: `${adaptiveImage.width}px`,
+            height: `${adaptiveImage.height}px`,
+            flex: `0 0 ${adaptiveImage.height}px`,
+            maxHeight: `${adaptiveImage.height}px`,
+          } : {
             flex: `0 1 ${imageHeight}%`,
             maxHeight: imageFrameMaxHeight.value === null
               ? `${imageHeight}%`
@@ -360,8 +433,8 @@ export const PostCard = defineComponent(
             "--scene-overlay": props.state.sceneOverlay / 100,
             "--scene-card-scale": sceneCardScale,
             "--scene-card-height-scale": sceneCardHeightScale,
-            "--scene-card-height": `${sceneCardBaseHeightValue * sceneCardHeightScale}px`,
-            "--scene-card-anchor-offset": `${sceneCardBaseHeightValue * sceneCardScale / 2}px`,
+            "--scene-card-height": `${sceneCardHeight}px`,
+            "--scene-card-anchor-offset": `${(sceneCardBaseHeightValue + sceneCardHeight - minimumSceneCardHeight) * sceneCardScale / 2}px`,
             "--scene-card-padding-top": `${scenePaddingTop * paddingScale}px`,
             "--scene-card-padding-right": `${scenePaddingRight * paddingScale}px`,
             "--scene-card-padding-bottom": `${scenePaddingBottom * paddingScale}px`,
@@ -446,10 +519,10 @@ export const PostCard = defineComponent(
             </div>
             {isFolio && (
               <div class="post-social-actions" aria-hidden="true">
-                <span><MessageCircle />{props.state.socialReplies && <b><span>{props.state.socialReplies}</span></b>}</span>
-                <span><Repeat2 />{props.state.socialReposts && <b><span>{props.state.socialReposts}</span></b>}</span>
-                <span><Heart />{props.state.socialLikes && <b><span>{props.state.socialLikes}</span></b>}</span>
-                <span><BarChart3 />{props.state.socialViews && <b><span>{props.state.socialViews}</span></b>}</span>
+                <span><MessageCircle />{hasSocialMetric(props.state.socialReplies) && <b><span>{props.state.socialReplies}</span></b>}</span>
+                <span><Repeat2 />{hasSocialMetric(props.state.socialReposts) && <b><span>{props.state.socialReposts}</span></b>}</span>
+                <span><Heart />{hasSocialMetric(props.state.socialLikes) && <b><span>{props.state.socialLikes}</span></b>}</span>
+                <span><BarChart3 />{hasSocialMetric(props.state.socialViews) && <b><span>{props.state.socialViews}</span></b>}</span>
                 <span><Bookmark /></span>
                 <span><Share /></span>
               </div>

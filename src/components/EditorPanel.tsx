@@ -6,7 +6,6 @@ import {
   Copy,
   ChevronDown,
   ChevronUp,
-  Dices,
   FileText,
   Heading1,
   Italic,
@@ -46,6 +45,7 @@ import { BrandTemplateLibrary } from "./BrandTemplateLibrary";
 import { BackdropControls } from "./BackdropControls";
 import { LayoutReveal } from "./LayoutReveal";
 import { SettingsDisclosure } from "./SettingsDisclosure";
+import { SocialMetricsControls } from "./SocialMetricsControls";
 import { TimePicker } from "./TimePicker";
 import { DatePicker } from "./DatePicker";
 import { Toggle } from "./Toggle";
@@ -56,33 +56,6 @@ import { UploadField } from "./UploadField";
 const TEXTAREA_MIN_HEIGHT = 224;
 const TEXTAREA_HEIGHT_ANCHOR_MS = 260;
 type EditorTab = "content" | "layout" | "publish";
-
-const socialMetricFields = [
-  ["socialReplies", "评论"],
-  ["socialReposts", "转发"],
-  ["socialLikes", "喜欢"],
-  ["socialViews", "浏览"],
-] as const;
-
-const socialMetricScaleOptions = [
-  { value: "subtle", label: "克制", likes: [5, 80], views: [16, 25] },
-  { value: "daily", label: "日常", likes: [100, 2_000], views: [12, 18] },
-  { value: "popular", label: "热门", likes: [5_000, 50_000], views: [20, 40] },
-] as const;
-
-function randomInteger(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function compactMetric(value: number) {
-  if (value < 1_000) return String(value);
-  if (value < 1_000_000) {
-    const thousands = value / 1_000;
-    return `${thousands >= 10 ? Math.round(thousands) : Math.round(thousands * 10) / 10}K`;
-  }
-  const millions = value / 1_000_000;
-  return `${millions >= 10 ? Math.round(millions) : Math.round(millions * 10) / 10}M`;
-}
 
 function SwitchRow(props: {
   label: string;
@@ -120,9 +93,9 @@ export const EditorPanel = defineComponent(
     image: string | null;
     imageScaleMax: number;
     sceneImage: string | null;
-    onAvatarFile: (file: File) => void;
-    onImageFile: (file: File) => void;
-    onSceneImageFile: (file: File) => void;
+    onAvatarFile: (file: File) => void | Promise<void>;
+    onImageFile: (file: File) => void | Promise<void>;
+    onSceneImageFile: (file: File) => void | Promise<void>;
     onRemoveAvatar: () => void;
     onRemoveImage: () => void;
     onRemoveSceneImage: () => void;
@@ -561,18 +534,6 @@ export const EditorPanel = defineComponent(
           key,
           (event.target as HTMLInputElement).value as BymarkState[K],
         );
-    const randomizeSocialMetrics = () => {
-      const scale = socialMetricScaleOptions.find((option) => option.value === props.state.socialMetricScale) ?? socialMetricScaleOptions[1];
-      const likes = randomInteger(scale.likes[0], scale.likes[1]);
-      const replies = randomInteger(Math.max(1, Math.round(likes * 0.006)), Math.max(2, Math.round(likes * 0.06)));
-      const reposts = randomInteger(Math.max(1, Math.round(likes * 0.003)), Math.max(2, Math.round(likes * 0.03)));
-      const views = likes * randomInteger(scale.views[0], scale.views[1]);
-
-      props.update("socialReplies", compactMetric(replies));
-      props.update("socialReposts", compactMetric(reposts));
-      props.update("socialLikes", compactMetric(likes));
-      props.update("socialViews", compactMetric(views));
-    };
     const countChinese = () => countChineseCharacters(props.state.text);
     const countTotal = () => countCharacters(props.state.text);
     const readingMinutes = () => {
@@ -781,59 +742,7 @@ export const EditorPanel = defineComponent(
                 </div>
               </section>
               <LayoutReveal show={props.state.visualStyle === "folio"}>
-                <SettingsDisclosure
-                  id="bymark-social-metrics"
-                  label="互动数据"
-                  class="social-metrics-disclosure"
-                  v-slots={{
-                    action: () => (
-                      <button
-                        type="button"
-                        class="social-metrics-random-button"
-                        aria-label={`按${socialMetricScaleOptions.find((option) => option.value === props.state.socialMetricScale)?.label ?? "日常"}规模随机生成四项互动数据`}
-                        title={`按${socialMetricScaleOptions.find((option) => option.value === props.state.socialMetricScale)?.label ?? "日常"}规模随机生成四项互动数据`}
-                        onClick={randomizeSocialMetrics}
-                      >
-                        <Dices size={16} aria-hidden="true" />
-                      </button>
-                    ),
-                  }}
-                >
-                  <section class="social-metrics-editor" aria-label="互动数据编辑">
-                    <div class="social-metrics-scale">
-                      <span>随机规模</span>
-                      <div class="social-metrics-scale-picker" role="group" aria-label="随机互动数据规模">
-                        {socialMetricScaleOptions.map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            class={props.state.socialMetricScale === option.value ? "active" : ""}
-                            aria-pressed={props.state.socialMetricScale === option.value}
-                            onClick={() => props.update("socialMetricScale", option.value)}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div class="social-metrics-grid">
-                      {socialMetricFields.map(([key, label]) => (
-                        <label key={key} class="social-metric-field" for={`bymark-${key}`}>
-                          <span>{label}</span>
-                          <input
-                            id={`bymark-${key}`}
-                            class="control"
-                            value={props.state[key]}
-                            maxlength={8}
-                            inputmode="text"
-                            placeholder="留空"
-                            onInput={setInput(key)}
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  </section>
-                </SettingsDisclosure>
+                <SocialMetricsControls state={props.state} update={props.update} />
               </LayoutReveal>
               <LayoutReveal show={props.overflowing}>
                 <button type="button" class="overflow-action" onClick={() => selectTab("layout")}>
@@ -1080,10 +989,10 @@ export const EditorPanel = defineComponent(
                         <button
                           type="button"
                           class="scale-step"
-                          aria-label="图片缩小 10%"
-                          title="图片缩小 10%"
+                          aria-label="图片缩小 1%"
+                          title="图片缩小 1%"
                           disabled={props.state.imageScale <= IMAGE_SCALE_MIN}
-                          onClick={() => props.update("imageScale", Math.max(IMAGE_SCALE_MIN, props.state.imageScale - 10))}
+                          onClick={() => props.update("imageScale", Math.max(IMAGE_SCALE_MIN, props.state.imageScale - 1))}
                         >
                           <Minus size={14} aria-hidden="true" />
                         </button>
@@ -1100,10 +1009,10 @@ export const EditorPanel = defineComponent(
                         <button
                           type="button"
                           class="scale-step"
-                          aria-label="图片放大 10%"
-                          title="图片放大 10%"
+                          aria-label="图片放大 1%"
+                          title="图片放大 1%"
                           disabled={props.state.imageScale >= imageScaleMax.value}
-                          onClick={() => props.update("imageScale", Math.min(imageScaleMax.value, props.state.imageScale + 10))}
+                          onClick={() => props.update("imageScale", Math.min(imageScaleMax.value, props.state.imageScale + 1))}
                         >
                           <Plus size={14} aria-hidden="true" />
                         </button>

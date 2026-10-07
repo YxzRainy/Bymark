@@ -360,9 +360,12 @@ export default defineComponent(() => {
   };
   let imageSaveQueue = Promise.resolve();
   const queueImageSave = (key: string, value: string | null) => {
-    imageSaveQueue = imageSaveQueue.then(() => saveImageAsset(key, value)).catch(() => {
-      notice.value = { tone: "error", message: "配图无法保存到本地，请稍后重试。" };
+    imageSaveQueue = imageSaveQueue.catch(() => undefined).then(() => saveImageAsset(key, value)).catch(() => {
+      const message = `${key === SCENE_IMAGE_ASSET_KEY ? "场景背景" : "配图"}无法保存到本地，请稍后重试。`;
+      notice.value = { tone: "error", message };
+      throw new Error(message);
     });
+    return imageSaveQueue;
   };
   const currentSnapshot = () => createSnapshot(state.value, avatar.value, image.value, sceneImage.value);
   const currentDraft = () => activeDraftId.value ? drafts.value.find((draft) => draft.id === activeDraftId.value) ?? null : null;
@@ -647,45 +650,66 @@ export default defineComponent(() => {
       templatePending.value = false;
     }
   };
-  const readImage = (file: File, setter: (value: string | null) => void) => {
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      notice.value = { tone: "error", message: "仅支持 JPG、PNG 或 WebP 图片。" };
-      return;
+  const readImage = async (file: File, setter: (value: string | null) => void | Promise<void>) => {
+    try {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+        throw new Error("仅支持 JPG、PNG 或 WebP 图片。");
+      }
+      if (file.size > 15 * 1024 * 1024) throw new Error("图片不能超过 15 MB。");
+      const source = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string"
+          ? resolve(reader.result)
+          : reject(new Error("图片读取失败，请重新选择。"));
+        reader.onerror = () => reject(new Error("图片读取失败，请重新选择。"));
+        reader.onabort = () => reject(new Error("图片读取已取消，请重新选择。"));
+        reader.readAsDataURL(file);
+      });
+      const imageElement = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const element = new Image();
+        element.onload = () => element.naturalWidth && element.naturalHeight
+          ? resolve(element)
+          : reject(new Error("图片尺寸读取失败，请重新选择。"));
+        element.onerror = () => reject(new Error("图片尺寸读取失败，请重新选择。"));
+        element.src = source;
+      });
+      const maxDimension = 4096;
+      const longest = Math.max(imageElement.naturalWidth, imageElement.naturalHeight);
+      if (longest <= maxDimension) {
+        await setter(source);
+        return;
+      }
+      const scale = maxDimension / longest;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(imageElement.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(imageElement.naturalHeight * scale));
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("图片尺寸过大且无法压缩，请换一张图片。");
+      context.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+      await setter(canvas.toDataURL(file.type, 0.92));
+    } catch (error) {
+      notice.value = { tone: "error", message: error instanceof Error ? error.message : "图片处理失败，请重新选择。" };
+      throw error;
     }
-    if (file.size > 15 * 1024 * 1024) {
-      notice.value = { tone: "error", message: "图片不能超过 15 MB。" };
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== "string") return;
-      const source = reader.result;
-      const imageElement = new Image();
-      imageElement.onload = () => {
-        const maxDimension = 4096;
-        const longest = Math.max(imageElement.naturalWidth, imageElement.naturalHeight);
-        if (longest <= maxDimension) {
-          setter(source);
-          return;
-        }
-        const scale = maxDimension / longest;
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.max(1, Math.round(imageElement.naturalWidth * scale));
-        canvas.height = Math.max(1, Math.round(imageElement.naturalHeight * scale));
-        const context = canvas.getContext("2d");
-        if (!context) {
-          notice.value = { tone: "error", message: "图片尺寸过大且无法压缩，请换一张图片。" };
-          return;
-        }
-        context.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
-        setter(canvas.toDataURL(file.type === "image/png" ? "image/png" : "image/jpeg", 0.92));
-      };
-      imageElement.onerror = () => (notice.value = { tone: "error", message: "图片尺寸读取失败，请重新选择。" });
-      imageElement.src = source;
-    };
-    reader.onerror = () => (notice.value = { tone: "error", message: "图片读取失败，请重新选择。" });
-    reader.readAsDataURL(file);
   };
+  const applyImageFile = (file: File) => readImage(file, async (value) => {
+    const unchanged = image.value === value;
+    image.value = value;
+    // The synchronous image watcher queues the durable asset write before
+    // this await. A crop is complete only when both copies have been saved.
+    // A retry may produce identical pixels, so queue it explicitly when Vue
+    // would otherwise skip the watcher for an unchanged data URL.
+    await (unchanged ? queueImageSave(IMAGE_ASSET_KEY, value) : imageSaveQueue);
+    if (autoSaveTimer) {
+      window.clearTimeout(autoSaveTimer);
+      autoSaveTimer = undefined;
+    }
+    try {
+      await saveActiveDraftSnapshot();
+    } catch {
+      throw new Error("配图无法保存到草稿，请稍后重试。");
+    }
+  });
   const resetInitialization = () => runDraftAction(async () => {
     if (autoSaveTimer) window.clearTimeout(autoSaveTimer);
     applyingSnapshot = true;
@@ -1158,8 +1182,8 @@ export default defineComponent(() => {
   watch([avatar, avatarReady], () => {
     if (avatarReady.value) queueAvatarSave(avatar.value);
   });
-  watch(image, (value) => queueImageSave(IMAGE_ASSET_KEY, value));
-  watch(sceneImage, (value) => queueImageSave(SCENE_IMAGE_ASSET_KEY, value));
+  watch(image, (value) => { void queueImageSave(IMAGE_ASSET_KEY, value).catch(() => undefined); }, { flush: "sync" });
+  watch(sceneImage, (value) => { void queueImageSave(SCENE_IMAGE_ASSET_KEY, value).catch(() => undefined); }, { flush: "sync" });
   watch([exportFormat, exportResolution], ([format, resolution]) => {
     saveExportPreferences(format, resolution);
   }, { flush: "sync" });
@@ -1177,7 +1201,12 @@ export default defineComponent(() => {
       state.value.sceneCardRatio,
       state.value.sceneCardHeight,
       state.value.sceneCardPadding,
-      Boolean(image.value),
+      state.value.imageScale,
+      state.value.visualStyle === "folio" && state.value.canvasStyle === "scene" && image.value
+        ? `${state.value.sceneCardScale}:${state.value.sceneCardY}` : null,
+      // A replacement photo can have a different aspect ratio even when the
+      // presence of an image is unchanged, altering the first page's capacity.
+      image.value,
     ],
     (next, previous) => {
       paginationCapacityScale.value = 1;
@@ -1232,8 +1261,8 @@ export default defineComponent(() => {
           imageScaleMax={imageScaleMax.value}
           sceneImage={sceneImage.value}
           onAvatarFile={(file) => readImage(file, updateAvatar)}
-          onImageFile={(file) => readImage(file, (value) => (image.value = value))}
-          onSceneImageFile={(file) => readImage(file, (value) => (sceneImage.value = value))}
+          onImageFile={applyImageFile}
+          onSceneImageFile={(file) => readImage(file, (value) => { sceneImage.value = value; })}
           onRemoveAvatar={() => updateAvatar(DEFAULT_AVATAR)}
           onRemoveImage={() => (image.value = null)}
           onRemoveSceneImage={() => (sceneImage.value = null)}

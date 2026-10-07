@@ -653,7 +653,7 @@ textarea:focus-visible {
 
 .social-metrics-scale-picker {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 2px;
   padding: 2px;
   background: var(--control-bg);
@@ -3339,7 +3339,7 @@ textarea:focus-visible {
   overflow: hidden;
   margin-top: 15px;
   border-radius: 6px;
-  box-shadow: rgba(99, 99, 99, 0.2) 0px 2px 8px 0px;
+  box-shadow: none;
 }
 
 .post-image-wrap img {
@@ -4777,7 +4777,7 @@ textarea:focus-visible {
 .scene-card-height-control,
 .scene-card-padding-control,
 .scene-overlay-control {
-  grid-template-columns: 18px minmax(0, 1fr) 18px;
+  grid-template-columns: 26px minmax(0, 1fr) 26px;
   gap: 10px;
   margin-bottom: 2px;
 }
@@ -8096,4 +8096,119 @@ html:has(.app-shell.ui-white) {
     border: 0 !important;
     box-shadow: none;
   }
+}
+
+html.image-crop-dialog-open,
+html.image-crop-dialog-open body { overflow: hidden; }
+
+.image-crop-dialog {
+  --accent: #526b3c;
+  --crop-viewport-height: var(--bymark-visual-viewport-height, 100dvh);
+  position: fixed;
+  inset: calc(var(--bymark-visual-viewport-top, 0px) + var(--crop-viewport-height) / 2) 0 auto;
+  margin: 0 auto;
+  transform: translateY(-50%);
+  width: min(720px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(var(--crop-viewport-height) - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: #22251d;
+  box-shadow: 0 24px 80px #00000030;
+}
+
+.image-crop-dialog::backdrop {
+  background: rgba(10, 12, 8, .64);
+  animation: image-crop-backdrop-in 220ms ease both;
+}
+
+.image-crop-dialog.is-closing::backdrop { animation: image-crop-backdrop-out 180ms ease both; }
+
+.image-crop-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+  overflow: hidden;
+  background: #f7f8f4;
+  border: 1px solid #d6d7d2;
+  border-radius: inherit;
+}
+
+.image-crop-panel-enter-active { transition: opacity 220ms ease, transform 220ms cubic-bezier(.2, .8, .2, 1); }
+.image-crop-panel-leave-active { transition: opacity 180ms ease, transform 180ms ease; pointer-events: none; }
+.image-crop-panel-enter-from { opacity: 0; transform: translateY(14px) scale(.975); }
+.image-crop-panel-leave-to { opacity: 0; transform: translateY(8px) scale(.985); }
+
+.image-crop-header { display: flex; flex: 0 0 auto; align-items: flex-start; gap: 16px; padding: 22px 24px 18px; }
+.image-crop-header > div { flex: 1; min-width: 0; }
+.image-crop-header h2 { margin: 0 0 7px; font-size: 20px; font-weight: 600; line-height: 1.4; outline: none; }
+.image-crop-header p { margin: 0; font-size: 13px; line-height: 1.65; color: #64695d; }
+.image-crop-close { display: grid; place-items: center; flex: 0 0 auto; width: 36px; height: 36px; margin: -4px -6px 0 0; padding: 0; color: #64695d; border: 0; border-radius: 6px; background: transparent; cursor: pointer; }
+.image-crop-close:hover:not(:disabled) { color: #22251d; background: #e7e9e2; }
+
+.image-crop-body { min-height: 0; padding: 0 24px; overflow: auto; overscroll-behavior: contain; }
+.image-crop-stage { position: relative; display: flex; align-items: center; justify-content: center; height: min(48dvh, 440px); padding: 16px; background: #e7e9e2; border-radius: 8px; }
+.image-crop-surface { position: relative; flex: 0 0 auto; overflow: visible; touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+.image-crop-surface > img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.image-crop-loading { position: absolute; color: #64695d; font-size: 13px; }
+.image-crop-selection {
+  position: absolute;
+  border: 1px solid white;
+  outline: 1px solid #3c4932;
+  cursor: move;
+  background: linear-gradient(to right, transparent 33%, #ffffff55 33%, #ffffff55 calc(33% + 1px), transparent calc(33% + 1px), transparent 66%, #ffffff55 66%, #ffffff55 calc(66% + 1px), transparent calc(66% + 1px)), linear-gradient(to bottom, transparent 33%, #ffffff55 33%, #ffffff55 calc(33% + 1px), transparent calc(33% + 1px), transparent 66%, #ffffff55 66%, #ffffff55 calc(66% + 1px), transparent calc(66% + 1px));
+}
+
+/* Clip the dimming mask to the image while keeping the touch handles exposed. */
+.image-crop-mask { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.image-crop-mask > div { position: absolute; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .48); }
+.image-crop-handle { position: absolute; z-index: 1; width: 32px; height: 32px; touch-action: none; }
+.image-crop-handle::after { content: ''; position: absolute; inset: 11px; background: white; border: 1px solid #35462b; border-radius: 2px; box-shadow: 0 1px 3px #00000025; }
+.image-crop-nw { left: -16px; top: -16px; cursor: nwse-resize; }
+.image-crop-ne { right: -16px; top: -16px; cursor: nesw-resize; }
+.image-crop-sw { left: -16px; bottom: -16px; cursor: nesw-resize; }
+.image-crop-se { right: -16px; bottom: -16px; cursor: nwse-resize; }
+.image-crop-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 18px 0 20px; }
+.image-crop-fields label { display: grid; gap: 6px; font-size: 12px; color: #64695d; }
+.image-crop-fields input { width: 100%; min-width: 0; min-height: 42px; padding: 8px 10px; color: #22251d; background: white; border: 1px solid #cdd1c7; border-radius: 5px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.image-crop-error { margin: 0 0 16px; color: #a44332; font-size: 13px; line-height: 1.6; }
+.image-crop-actions { display: flex; flex: 0 0 auto; justify-content: flex-end; gap: 8px; padding: 16px 24px 22px; border-top: 1px solid #dedfd9; }
+.image-crop-actions button { min-height: 42px; padding: 9px 14px; border: 1px solid #cdd1c7; border-radius: 6px; color: #22251d; background: white; font-size: 14px; line-height: 1.5; white-space: nowrap; cursor: pointer; transition: background-color 150ms ease; }
+.image-crop-actions button:first-child { margin-right: auto; }
+.image-crop-actions button:hover:not(:disabled) { background: #edf0e8; }
+.image-crop-actions .image-crop-confirm { background: #25371c; color: white; border-color: #25371c; }
+.image-crop-actions .image-crop-confirm:hover:not(:disabled) { background: #354b28; }
+.image-crop-panel button:disabled, .image-crop-fields input:disabled { opacity: .45; cursor: default; }
+
+@keyframes image-crop-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes image-crop-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
+
+@media (max-width: 480px) {
+  .image-crop-dialog { width: calc(100vw - 24px); max-height: calc(var(--crop-viewport-height) - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); border-radius: 12px; }
+  .image-crop-header { gap: 8px; padding: 18px 16px 14px; }
+  .image-crop-header h2 { font-size: 18px; }
+  .image-crop-header p { font-size: 12px; }
+  .image-crop-close { width: 44px; height: 44px; margin: -8px -8px 0 0; }
+  .image-crop-body { padding: 0 16px; }
+  .image-crop-stage { height: min(40dvh, 340px); }
+  .image-crop-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; margin: 14px 0 16px; }
+  .image-crop-fields input { min-height: 44px; font-size: 16px; }
+  .image-crop-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 10px; padding: 12px 16px 16px; }
+  .image-crop-actions button { min-height: 44px; padding: 9px 10px; }
+  .image-crop-actions button:first-child { grid-column: 1 / -1; justify-self: start; margin: 0; padding: 0; min-height: 36px; border-color: transparent; background: transparent; color: #526b3c; }
+  .image-crop-handle { width: 44px; height: 44px; }
+  .image-crop-handle::after { inset: 17px; }
+  .image-crop-nw { left: -22px; top: -22px; }
+  .image-crop-ne { right: -22px; top: -22px; }
+  .image-crop-sw { left: -22px; bottom: -22px; }
+  .image-crop-se { right: -22px; bottom: -22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-crop-panel-enter-active, .image-crop-panel-leave-active, .image-crop-actions button { transition: none; }
+  .image-crop-panel-enter-from, .image-crop-panel-leave-to { transform: none; }
+  .image-crop-dialog::backdrop, .image-crop-dialog.is-closing::backdrop { animation: none; }
 }

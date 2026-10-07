@@ -1,6 +1,7 @@
 import type { BymarkState } from "./bymark";
 import { DEFAULT_IMAGE_SCALE, DEFAULT_SCENE_CARD_HEIGHT, DEFAULT_SCENE_CARD_PADDING, SCENE_CARD_HEIGHT_MAX, SCENE_CARD_HEIGHT_MIN, SCENE_CARD_PADDING_MAX, SCENE_CARD_PADDING_MIN, themeLabel } from "./default-settings.ts";
 import { normalizeSceneBackdrop } from "./sceneBackdrops.ts";
+import { normalizeSocialMetricScale } from './socialMetrics.ts';
 import { isSharedStorageEnabled, loadSharedValue, removeSharedValue, saveSharedValue } from './sharedStorage.ts';
 
 export type BrandProfile = Pick<
@@ -107,7 +108,7 @@ function normalizeBrandTemplate(value: BrandTemplate): BrandTemplate {
       socialReposts: typeof profile.socialReposts === "string" ? profile.socialReposts.slice(0, 8) : "",
       socialLikes: typeof profile.socialLikes === "string" ? profile.socialLikes.slice(0, 8) : "5",
       socialViews: typeof profile.socialViews === "string" ? profile.socialViews.slice(0, 8) : "307",
-      socialMetricScale: profile.socialMetricScale === "subtle" || profile.socialMetricScale === "popular" ? profile.socialMetricScale : "daily",
+      socialMetricScale: normalizeSocialMetricScale(profile.socialMetricScale),
       theme: profile.theme === "light" || profile.theme === "white" ? profile.theme : "dark",
       ratio: profile.ratio === "2:3" || profile.ratio === "9:16" ? profile.ratio : "3:4",
       exportMode: profile.exportMode === "douyin-cover" ? "douyin-cover" : "standard",

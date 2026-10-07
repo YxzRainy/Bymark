@@ -1,4 +1,5 @@
 import { defineComponent } from "vue";
+import { Minus, Plus } from "lucide-vue-next";
 import type { BymarkState } from "../bymark";
 import { SCENE_CARD_HEIGHT_MAX, SCENE_CARD_HEIGHT_MIN, SCENE_CARD_PADDING_MAX, SCENE_CARD_PADDING_MIN } from "../bymark";
 import { SCENE_BACKDROPS } from "../sceneBackdrops";
@@ -79,7 +80,14 @@ export const BackdropControls = defineComponent(
                 class="font-scale-control scene-card-scale-control"
                 style={{ "--font-progress": `${((props.state.sceneCardScale - 70) / 30) * 100}%` } as Record<string, string>}
               >
-                <span aria-hidden="true">−</span>
+                <button
+                  type="button"
+                  class="scale-step"
+                  aria-label="卡片缩小 1%"
+                  title="卡片缩小 1%"
+                  disabled={props.state.sceneCardScale <= 70}
+                  onClick={() => props.update("sceneCardScale", Math.max(70, props.state.sceneCardScale - 1))}
+                ><Minus size={14} aria-hidden="true" /></button>
                 <input
                   id={idFor("scene-card-scale")}
                   type="range"
@@ -89,7 +97,14 @@ export const BackdropControls = defineComponent(
                   value={props.state.sceneCardScale}
                   onInput={(event) => props.update("sceneCardScale", Number((event.target as HTMLInputElement).value))}
                 />
-                <span class="font-scale-large" aria-hidden="true">+</span>
+                <button
+                  type="button"
+                  class="scale-step"
+                  aria-label="卡片放大 1%"
+                  title="卡片放大 1%"
+                  disabled={props.state.sceneCardScale >= 100}
+                  onClick={() => props.update("sceneCardScale", Math.min(100, props.state.sceneCardScale + 1))}
+                ><Plus size={14} aria-hidden="true" /></button>
               </div>
               <div class="range-label">
                 <label class="field-label" for={idFor("scene-card-height")}>卡片高度</label>
@@ -101,7 +116,14 @@ export const BackdropControls = defineComponent(
                   "--font-progress": `${((props.state.sceneCardHeight - SCENE_CARD_HEIGHT_MIN) / (SCENE_CARD_HEIGHT_MAX - SCENE_CARD_HEIGHT_MIN)) * 100}%`,
                 } as Record<string, string>}
               >
-                <span aria-hidden="true">−</span>
+                <button
+                  type="button"
+                  class="scale-step"
+                  aria-label="卡片高度减少 1%"
+                  title="卡片高度减少 1%"
+                  disabled={props.state.sceneCardHeight <= SCENE_CARD_HEIGHT_MIN}
+                  onClick={() => props.update("sceneCardHeight", Math.max(SCENE_CARD_HEIGHT_MIN, props.state.sceneCardHeight - 1))}
+                ><Minus size={14} aria-hidden="true" /></button>
                 <input
                   id={idFor("scene-card-height")}
                   type="range"
@@ -112,7 +134,14 @@ export const BackdropControls = defineComponent(
                   aria-valuetext={`${props.state.sceneCardHeight}%`}
                   onInput={(event) => props.update("sceneCardHeight", Number((event.target as HTMLInputElement).value))}
                 />
-                <span class="font-scale-large" aria-hidden="true">+</span>
+                <button
+                  type="button"
+                  class="scale-step"
+                  aria-label="卡片高度增加 1%"
+                  title="卡片高度增加 1%"
+                  disabled={props.state.sceneCardHeight >= SCENE_CARD_HEIGHT_MAX}
+                  onClick={() => props.update("sceneCardHeight", Math.min(SCENE_CARD_HEIGHT_MAX, props.state.sceneCardHeight + 1))}
+                ><Plus size={14} aria-hidden="true" /></button>
               </div>
               <div class="range-label">
                 <label class="field-label" for={idFor("scene-card-padding")}>卡片内边距</label>
@@ -124,7 +153,14 @@ export const BackdropControls = defineComponent(
                   "--font-progress": `${((props.state.sceneCardPadding - SCENE_CARD_PADDING_MIN) / (SCENE_CARD_PADDING_MAX - SCENE_CARD_PADDING_MIN)) * 100}%`,
                 } as Record<string, string>}
               >
-                <span aria-hidden="true">−</span>
+                <button
+                  type="button"
+                  class="scale-step"
+                  aria-label="卡片内边距减少 1%"
+                  title="卡片内边距减少 1%"
+                  disabled={props.state.sceneCardPadding <= SCENE_CARD_PADDING_MIN}
+                  onClick={() => props.update("sceneCardPadding", Math.max(SCENE_CARD_PADDING_MIN, props.state.sceneCardPadding - 1))}
+                ><Minus size={14} aria-hidden="true" /></button>
                 <input
                   id={idFor("scene-card-padding")}
                   type="range"
@@ -135,7 +171,14 @@ export const BackdropControls = defineComponent(
                   aria-valuetext={`${props.state.sceneCardPadding}%`}
                   onInput={(event) => props.update("sceneCardPadding", Number((event.target as HTMLInputElement).value))}
                 />
-                <span class="font-scale-large" aria-hidden="true">+</span>
+                <button
+                  type="button"
+                  class="scale-step"
+                  aria-label="卡片内边距增加 1%"
+                  title="卡片内边距增加 1%"
+                  disabled={props.state.sceneCardPadding >= SCENE_CARD_PADDING_MAX}
+                  onClick={() => props.update("sceneCardPadding", Math.min(SCENE_CARD_PADDING_MAX, props.state.sceneCardPadding + 1))}
+                ><Plus size={14} aria-hidden="true" /></button>
               </div>
             </>
           )}
@@ -147,7 +190,14 @@ export const BackdropControls = defineComponent(
             class="font-scale-control scene-overlay-control"
             style={{ "--font-progress": `${(props.state.sceneOverlay / 70) * 100}%` } as Record<string, string>}
           >
-            <span aria-hidden="true">−</span>
+            <button
+              type="button"
+              class="scale-step"
+              aria-label="背景遮罩减少 1%"
+              title="背景遮罩减少 1%"
+              disabled={props.state.sceneOverlay <= 0}
+              onClick={() => props.update("sceneOverlay", Math.max(0, props.state.sceneOverlay - 1))}
+            ><Minus size={14} aria-hidden="true" /></button>
             <input
               id={idFor("scene-overlay")}
               type="range"
@@ -157,7 +207,14 @@ export const BackdropControls = defineComponent(
               value={props.state.sceneOverlay}
               onInput={(event) => props.update("sceneOverlay", Number((event.target as HTMLInputElement).value))}
             />
-            <span class="font-scale-large" aria-hidden="true">+</span>
+            <button
+              type="button"
+              class="scale-step"
+              aria-label="背景遮罩增加 1%"
+              title="背景遮罩增加 1%"
+              disabled={props.state.sceneOverlay >= 70}
+              onClick={() => props.update("sceneOverlay", Math.min(70, props.state.sceneOverlay + 1))}
+            ><Plus size={14} aria-hidden="true" /></button>
           </div>
         </SettingsDisclosure>
       </div>

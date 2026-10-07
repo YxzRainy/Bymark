@@ -204,14 +204,15 @@ export async function saveDraft(draft: Draft) {
     // Vue wraps entries read from a ref in proxies. IndexedDB cannot clone a
     // Proxy, so persist a plain data snapshot instead of the reactive object.
     const stored = JSON.parse(JSON.stringify(draft)) as Draft;
-    const request = database.transaction(DRAFT_STORE_NAME, "readwrite").objectStore(DRAFT_STORE_NAME).put(stored);
-    request.onsuccess = () => {
+    const transaction = database.transaction(DRAFT_STORE_NAME, "readwrite");
+    transaction.objectStore(DRAFT_STORE_NAME).put(stored);
+    transaction.oncomplete = () => {
       database.close();
       resolve();
     };
-    request.onerror = () => {
+    transaction.onerror = transaction.onabort = () => {
       database.close();
-      reject(request.error ?? new Error("Unable to save draft"));
+      reject(transaction.error ?? new Error("Unable to save draft"));
     };
   });
 }

@@ -15,7 +15,8 @@ export type CanvasStyle = 'card' | 'scene'
 export type SceneFocus = 'top' | 'center' | 'bottom'
 export type SceneCardRatio = '4:3' | '1:1' | '3:4'
 export type SceneBackdropPreset = 'lagoon' | 'sky' | 'graphite'
-export type SocialMetricScale = 'subtle' | 'daily' | 'popular'
+import type { SocialMetricScale } from './socialMetrics'
+export type { SocialMetricProfile, SocialMetricScale } from './socialMetrics'
 
 const SYSTEM_DEFAULT_THEME: Theme = 'dark'
 const THEME_CYCLE: readonly Theme[] = ['light', 'white', 'dark']
